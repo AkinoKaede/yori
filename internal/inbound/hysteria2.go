@@ -253,7 +253,8 @@ func buildTLSOptions(cfg config.Hysteria2Config) (*option.InboundTLSOptions, err
 			switch acme.DNS01.Provider {
 			case "cloudflare":
 				tlsOptions.ACME.DNS01Challenge.CloudflareOptions = option.ACMEDNS01CloudflareOptions{
-					APIToken: acme.DNS01.APIToken,
+					APIToken:  acme.DNS01.APIToken,
+					ZoneToken: acme.DNS01.ZoneToken,
 				}
 			case "alidns":
 				tlsOptions.ACME.DNS01Challenge.AliDNSOptions = option.ACMEDNS01AliDNSOptions{

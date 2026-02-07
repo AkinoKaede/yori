@@ -117,6 +117,7 @@ type ACMEConfig struct {
 type DNS01ChallengeConfig struct {
 	Provider  string `yaml:"provider"`
 	APIToken  string `yaml:"api_token"`
+	ZoneToken string `yaml:"zone_token"`
 	AccessKey string `yaml:"access_key"`
 	SecretKey string `yaml:"secret_key"`
 }

@@ -154,6 +154,7 @@ hysteria2:
       # dns01_challenge:
       #   provider: "cloudflare"
       #   api_token: "${CLOUDFLARE_API_TOKEN}"
+      #   zone_token: "${CLOUDFLARE_ZONE_TOKEN}"
       
       # For Alibaba Cloud DNS:
       # dns01_challenge:
