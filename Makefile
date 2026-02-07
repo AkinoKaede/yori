@@ -1,13 +1,20 @@
 .PHONY: build build-grpc run run-grpc test tidy fmt clean
 
+NAME = proxy-relay
+COMMIT = $(shell git rev-parse --short HEAD)
+TAG = $(shell git describe --tags --always)
+VERSION = $(TAG:v%=%)
+
 GO ?= go
 BINARY ?= relay
 CMD ?= ./cmd/relay
 TAGS ?= with_acme
 LDFLAGS ?=
 
+PARAMS = -v -trimpath -ldflags "-X 'github.com/AkinoKaede/proxy-relay/pkg/constant.Version=$(VERSION)' -s -w -buildid= $(LDFLAGS)"
+
 build:
-	$(GO) build -tags "$(TAGS)" -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
+	$(GO) build $(PARAMS) -tags "$(TAGS)" -o $(BINARY) $(CMD)
 
 build-grpc:
 	$(MAKE) build TAGS="$(TAGS) with_grpc"

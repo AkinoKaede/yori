@@ -13,11 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AkinoKaede/proxy-relay/internal/cachefile"
-	"github.com/AkinoKaede/proxy-relay/internal/config"
-	"github.com/AkinoKaede/proxy-relay/internal/subscription/parser"
+	"github.com/AkinoKaede/proxy-relay/cachefile"
+	"github.com/AkinoKaede/proxy-relay/config"
 	"github.com/AkinoKaede/proxy-relay/pkg/constant"
-	"github.com/sagernet/sing-box/include"
+	"github.com/AkinoKaede/proxy-relay/subscription/parser"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
@@ -49,7 +48,6 @@ type Subscription struct {
 
 // NewManager creates a new subscription manager
 func NewManager(ctx context.Context, logger logger.Logger, cfg *config.Config) (*Manager, error) {
-	ctx = include.Context(ctx)
 	subscriptions := make([]*Subscription, 0, len(cfg.Subscriptions))
 
 	for i, subCfg := range cfg.Subscriptions {
@@ -198,7 +196,7 @@ func (m *Manager) fetchFromHTTP(sub *Subscription) error {
 		if version == "" {
 			version = "unknown"
 		}
-		req.Header.Set("User-Agent", fmt.Sprintf("proxy-relay/%s (sing-box %s; like serenity/1.1.0-beta.3; Clash compatible)", version, constant.CoreVersion()))
+		req.Header.Set("User-Agent", fmt.Sprintf("proxy-relay/%s (sing-box %s; Clash compatible; like serenity/1.1.0-beta.3)", version, constant.CoreVersion()))
 	}
 
 	// Set ETag for conditional request

@@ -50,7 +50,7 @@ A Hysteria2-based relay proxy that dynamically fetches outbounds from multiple s
 
 ```bash
 cd proxy-relay
-go build -o relay ./cmd/relay
+make build
 ```
 
 ### Download Binary

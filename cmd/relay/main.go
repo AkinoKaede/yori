@@ -8,18 +8,19 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/debug"
 	"syscall"
 	"time"
 
 	"github.com/AkinoKaede/proxy-relay/internal/config"
 	"github.com/AkinoKaede/proxy-relay/internal/datafile"
 	"github.com/AkinoKaede/proxy-relay/internal/engine"
+	"github.com/AkinoKaede/proxy-relay/pkg/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 )
-
-const version = "1.0.0"
 
 var (
 	configPath  string
@@ -35,7 +36,7 @@ func main() {
 	flag.Parse()
 
 	if showVersion {
-		fmt.Println("proxy-relay version", version)
+		printVersion()
 		return
 	}
 
@@ -67,6 +68,32 @@ func main() {
 	if err := run(logger, cfg); err != nil {
 		logger.Error("fatal: ", err)
 		os.Exit(1)
+	}
+}
+
+func printVersion() {
+	version := constant.Version
+	if version == "" {
+		version = "unknown"
+	}
+	coreVersion := constant.CoreVersion()
+	if coreVersion == "" {
+		coreVersion = "unknown"
+	}
+	fmt.Printf("proxy-relay version %s (sing-box %s)\n\n", version, coreVersion)
+	fmt.Printf("Environment: %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+
+	var revision string
+	if info, loaded := debug.ReadBuildInfo(); loaded {
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" {
+				revision = setting.Value
+				break
+			}
+		}
+	}
+	if revision != "" {
+		fmt.Printf("Revision: %s\n", revision)
 	}
 }
 
