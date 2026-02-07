@@ -24,11 +24,10 @@ type Config struct {
 
 // Subscription represents a single subscription source
 type Subscription struct {
-	Name           string                   `yaml:"name"`
-	URL            string                   `yaml:"url"`
-	UserAgent      string                   `yaml:"user_agent"`
-	UpdateInterval Duration                 `yaml:"update_interval"`
-	Process        []OutboundProcessOptions `yaml:"process"`
+	Name      string                   `yaml:"name"`
+	URL       string                   `yaml:"url"`
+	UserAgent string                   `yaml:"user_agent"`
+	Process   []OutboundProcessOptions `yaml:"process"`
 }
 
 // OutboundProcessOptions defines filters and rewrites for outbounds
@@ -171,10 +170,6 @@ func (c *Config) Validate() error {
 		}
 		if sub.URL == "" {
 			return E.New("subscription[", sub.Name, "]: URL is required")
-		}
-		// Default update interval
-		if sub.UpdateInterval == 0 {
-			c.Subscriptions[i].UpdateInterval = Duration(30 * time.Minute)
 		}
 	}
 

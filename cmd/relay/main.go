@@ -242,9 +242,28 @@ func reload(
 	httpServer *server.Server,
 	dataFile *datafile.DataFile,
 ) error {
-	// Fetch updated subscriptions
+	// Reload configuration file
+	log.Info("Reloading configuration from file...")
+	newCfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		log.Error("Failed to reload configuration file: ", err)
+		log.Warn("Continuing with previous configuration")
+		// Use existing config
+		newCfg = cfg
+	} else {
+		log.Info("Configuration file reloaded successfully")
+		// Update configuration reference (shallow copy important fields)
+		cfg.LogLevel = newCfg.LogLevel
+		cfg.HTTP = newCfg.HTTP
+		cfg.Hysteria2 = newCfg.Hysteria2
+		// Note: We don't update Subscriptions here as subscription manager is already initialized
+		// If subscriptions changed, a full restart is needed
+	}
+
+	// Fetch updated subscriptions (even if config reload failed, try to update subscriptions)
 	if err := subManager.FetchAll(); err != nil {
-		log.Warn("Some subscriptions failed to fetch: ", err)
+		log.Warn("Some subscriptions failed to fetch, using cached data where available: ", err)
+		// Continue anyway - we might have cached data
 	}
 
 	// Merge outbounds
@@ -255,18 +274,18 @@ func reload(
 		return E.New("no outbounds after reload")
 	}
 
-	// Extract usernames from HTTP users
+	// Extract usernames from HTTP users (may have changed)
 	var usernames []string
-	for _, user := range cfg.HTTP.Users {
+	for _, user := range newCfg.HTTP.Users {
 		usernames = append(usernames, user.Username)
 	}
 
 	// Generate new users (one per HTTP username × outbound combination)
 	users, userMapping, httpUserMapping := generator.GenerateUsers(ctx, outbounds, usernames, dataFile)
-	log.Info("Generated ", len(users), " users")
+	log.Info("Generated ", len(users), " users for ", len(usernames), " HTTP user(s)")
 
 	// Generate new sing-box configuration
-	boxConfig, err := generator.GenerateConfig(cfg, outbounds, users, userMapping)
+	boxConfig, err := generator.GenerateConfig(newCfg, outbounds, users, userMapping)
 	if err != nil {
 		return E.Cause(err, "generate configuration")
 	}
@@ -289,23 +308,44 @@ func reload(
 		log.Info("sing-box restarted successfully")
 	}
 
+	// Update HTTP server users and rename patterns
+	var httpUsers []server.HTTPUser
+	for _, user := range newCfg.HTTP.Users {
+		var patterns []*regexp.Regexp
+		for _, pattern := range user.Pattern {
+			regex, err := regexp.Compile(pattern)
+			if err != nil {
+				log.Warn("invalid HTTP user pattern: ", pattern, ": ", err)
+				continue
+			}
+			patterns = append(patterns, regex)
+		}
+		httpUsers = append(httpUsers, server.HTTPUser{
+			Username: user.Username,
+			Password: user.Password,
+			Patterns: patterns,
+		})
+	}
+	httpServer.UpdateUsers(httpUsers)
+	httpServer.UpdateRenamePatterns(newCfg.HTTP.Rename)
+
 	// Update HTTP server state
 	var sni string
-	if cfg.Hysteria2.TLS.ACME != nil && len(cfg.Hysteria2.TLS.ACME.Domain) > 0 {
-		sni = cfg.Hysteria2.TLS.ACME.Domain[0]
+	if newCfg.Hysteria2.TLS.ACME != nil && len(newCfg.Hysteria2.TLS.ACME.Domain) > 0 {
+		sni = newCfg.Hysteria2.TLS.ACME.Domain[0]
 	}
 
 	obfsType := ""
-	if cfg.Hysteria2.Obfs != nil {
-		obfsType = cfg.Hysteria2.Obfs.Type
+	if newCfg.Hysteria2.Obfs != nil {
+		obfsType = newCfg.Hysteria2.Obfs.Type
 	}
 
 	serverState := &server.State{
 		Users:                    users,
 		LocalOnlyTags:            subManager.GetLocalOnlyTags(),
 		HTTPUserToHysteria2Users: httpUserMapping,
-		PublicAddr:               cfg.Hysteria2.Public.Server,
-		PublicPorts:              cfg.Hysteria2.Public.Ports,
+		PublicAddr:               newCfg.Hysteria2.Public.Server,
+		PublicPorts:              newCfg.Hysteria2.Public.Ports,
 		SNI:                      sni,
 		Obfs:                     obfsType,
 	}

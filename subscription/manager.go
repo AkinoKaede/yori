@@ -32,11 +32,10 @@ type Manager struct {
 
 // Subscription represents a single subscription with its state
 type Subscription struct {
-	Name           string
-	URL            string
-	UserAgent      string
-	UpdateInterval time.Duration
-	processes      []*ProcessOptions
+	Name      string
+	URL       string
+	UserAgent string
+	processes []*ProcessOptions
 
 	rawOutbounds  []option.Outbound // Fetched from source
 	Outbounds     []option.Outbound // After processing
@@ -61,12 +60,11 @@ func NewManager(ctx context.Context, logger logger.Logger, cfg *config.Config) (
 		}
 
 		subscriptions = append(subscriptions, &Subscription{
-			Name:           subCfg.Name,
-			URL:            subCfg.URL,
-			UserAgent:      subCfg.UserAgent,
-			UpdateInterval: subCfg.UpdateInterval.Duration(),
-			processes:      processes,
-			LocalOnlyTags:  make(map[string]bool),
+			Name:          subCfg.Name,
+			URL:           subCfg.URL,
+			UserAgent:     subCfg.UserAgent,
+			processes:     processes,
+			LocalOnlyTags: make(map[string]bool),
 		})
 
 		logger.Info("loaded subscription[", i, "]: ", subCfg.Name, " (", subCfg.URL, ")")
@@ -119,28 +117,52 @@ func NewManager(ctx context.Context, logger logger.Logger, cfg *config.Config) (
 	}, nil
 }
 
-// FetchAll fetches all subscriptions that need updating
+// FetchAll fetches all subscriptions
+// If a subscription fetch fails, it will keep using cached data and continue with other subscriptions
 func (m *Manager) FetchAll() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	var errors []error
+	successCount := 0
+	cachedCount := 0
 
 	for _, sub := range m.subscriptions {
-		// Check if update is needed
-		if !sub.LastUpdated.IsZero() && time.Since(sub.LastUpdated) < sub.UpdateInterval {
-			continue
-		}
-
 		if err := m.fetchSubscription(sub); err != nil {
 			m.logger.Error("fetch subscription ", sub.Name, ": ", err)
 			errors = append(errors, E.Cause(err, "fetch ", sub.Name))
+
+			// Check if we have cached data to fall back on
+			if len(sub.Outbounds) > 0 {
+				m.logger.Warn("using cached data for ", sub.Name, ": ", len(sub.Outbounds), " outbounds (last updated: ", sub.LastUpdated.Format(time.RFC3339), ")")
+				cachedCount++
+			} else {
+				m.logger.Error("no cached data available for ", sub.Name)
+			}
 			// Continue with other subscriptions
 			continue
 		}
+		successCount++
 	}
 
+	m.logger.Info("fetch summary: ", successCount, " succeeded, ", cachedCount, " using cache, ", len(errors)-cachedCount, " failed with no cache")
+
+	// Only return error if we have no data at all
 	if len(errors) > 0 {
+		// Check if we have at least some data
+		hasData := false
+		for _, sub := range m.subscriptions {
+			if len(sub.Outbounds) > 0 {
+				hasData = true
+				break
+			}
+		}
+
+		if !hasData {
+			return E.New("all subscriptions failed and no cached data available")
+		}
+
+		// Return errors but don't fail - we have some data to work with
 		return E.Errors(errors...)
 	}
 
@@ -190,22 +212,33 @@ func (m *Manager) fetchFromHTTP(sub *Subscription) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		// Don't clear existing data on error
 		return E.New("unexpected status: ", resp.Status)
 	}
 
 	// Read response body
 	content, err := io.ReadAll(resp.Body)
 	if err != nil {
+		// Don't clear existing data on error
 		return E.Cause(err, "read response")
 	}
 
 	// Parse subscription
 	outbounds, err := parser.ParseSubscription(m.ctx, string(content))
 	if err != nil {
+		// Don't clear existing data on parse error
 		return E.Cause(err, "parse subscription")
 	}
 
-	// Store raw outbounds
+	// Validate we have at least some outbounds
+	if len(outbounds) == 0 {
+		m.logger.Warn("subscription ", sub.Name, " returned 0 outbounds, keeping existing data")
+		if len(sub.Outbounds) > 0 {
+			return E.New("subscription returned empty data")
+		}
+	}
+
+	// Store raw outbounds (only update if we got valid data)
 	sub.rawOutbounds = outbounds
 
 	// Process outbounds
@@ -249,16 +282,26 @@ func (m *Manager) fetchFromFile(sub *Subscription) error {
 	// Read file
 	content, err := os.ReadFile(filePath)
 	if err != nil {
+		// Don't clear existing data on error
 		return E.Cause(err, "read file")
 	}
 
 	// Parse subscription
 	outbounds, err := parser.ParseSubscription(m.ctx, string(content))
 	if err != nil {
+		// Don't clear existing data on parse error
 		return E.Cause(err, "parse subscription")
 	}
 
-	// Store raw outbounds
+	// Validate we have at least some outbounds
+	if len(outbounds) == 0 {
+		m.logger.Warn("subscription file ", sub.Name, " returned 0 outbounds, keeping existing data")
+		if len(sub.Outbounds) > 0 {
+			return E.New("subscription file returned empty data")
+		}
+	}
+
+	// Store raw outbounds (only update if we got valid data)
 	sub.rawOutbounds = outbounds
 
 	// Process outbounds

@@ -191,6 +191,35 @@ func (s *Server) UpdateState(state *State) {
 	s.state = state
 }
 
+// UpdateUsers updates the HTTP users configuration
+func (s *Server) UpdateUsers(users []HTTPUser) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.users = users
+	s.logger.Info("updated HTTP users: ", len(users), " user(s)")
+}
+
+// UpdateRenamePatterns updates the rename patterns
+func (s *Server) UpdateRenamePatterns(rename map[string]string) {
+	var renamePatterns []renamePattern
+	for pattern, repl := range rename {
+		regex, err := regexp.Compile(pattern)
+		if err != nil {
+			s.logger.Warn("invalid rename pattern: ", pattern, ": ", err)
+			continue
+		}
+		renamePatterns = append(renamePatterns, renamePattern{
+			regex: regex,
+			repl:  repl,
+		})
+	}
+
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.renamePatterns = renamePatterns
+	s.logger.Info("updated rename patterns: ", len(renamePatterns), " pattern(s)")
+}
+
 // authenticate checks HTTP Basic Auth and returns the authenticated user's username
 // If no users configured, returns "user" as default
 func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) string {

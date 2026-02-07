@@ -14,7 +14,6 @@ subscriptions:
   - name: "main-provider"
     url: "https://example.com/subscription?token=YOUR_TOKEN"
     user_agent: "clash-verge/1.0"  # Optional: Custom User-Agent
-    update_interval: "1h"           # Update every hour
     process:
       # Step 1: Filter by protocol types
       - filter_type: ["shadowsocks", "vmess", "trojan", "hysteria2"]
@@ -61,14 +60,12 @@ subscriptions:
   # Backup subscription from local file
   - name: "backup-local"
     url: "file://backup-nodes.json"  # Can be relative or absolute path
-    update_interval: "6h"
     process:
       - filter: ["backup-.*"]
 
   # Another provider with different processing
   - name: "secondary-provider"
     url: "https://another-provider.com/sub"
-    update_interval: "2h"
     process:
       # Only keep Hong Kong and Singapore nodes
       - filter: [".*(?i)(hong kong|singapore|香港|新加坡).*"]
@@ -83,7 +80,8 @@ subscriptions:
       - filter: [".*(?i)(expired|过期|维护中).*"]
         remove: true
 
-# Global reload interval (will use minimum of subscription intervals)
+# Global reload interval (subscriptions will be updated every reload)
+# Send SIGHUP signal to trigger manual reload
 reload_interval: "30m"
 
 # HTTP subscription server configuration
@@ -170,7 +168,6 @@ subscriptions:
   - name: "provider-a"
     url: "https://provider-a.com/sub"
     user_agent: "clash-verge/1.0"
-    update_interval: "1h"
     process:
       # Keep only specific protocols
       - filter_type: ["hysteria2", "vmess", "trojan"]
@@ -192,7 +189,6 @@ subscriptions:
   
   - name: "provider-b"
     url: "https://provider-b.com/sub"
-    update_interval: "2h"
     process:
       # Keep everything EXCEPT China nodes (using invert)
       - filter: [".*CN.*", ".*CHN.*", ".*中国.*"]
@@ -254,7 +250,6 @@ data_file: "data.db"
 subscriptions:
   - name: "simple"
     url: "https://example.com/sub"
-    update_interval: "1h"
 
 reload_interval: "30m"
 
