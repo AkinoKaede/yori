@@ -128,6 +128,8 @@ hysteria2:
   public:
     # Server address for share links (optional if using ACME - will use first domain)
     server: "relay.example.com"  # Your public domain or IP (can omit if using ACME)
+    # Optional: override SNI used in share links
+    # sni: "sni.example.com"
     # Use either 'port' for single port or 'ports' for multiple/ranges
     # If both specified, they will be merged
     # Port ranges use colon format (from:to) for sing-box compatibility

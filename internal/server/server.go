@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AkinoKaede/proxy-relay/internal/inbound"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json"
@@ -37,13 +38,14 @@ type HTTPUser struct {
 
 // State holds the server state information
 type State struct {
-	Users                    []option.Hysteria2User
+	Users                    []inbound.User
 	LocalOnlyTags            map[string]bool     // Tags of local-only outbounds (not available to users)
 	HTTPUserToHysteria2Users map[string][]string // HTTP username -> Hysteria2 usernames mapping
 	PublicAddr               string
 	PublicPorts              []string // Port list, supports ranges like "443:453"
 	SNI                      string
 	Obfs                     string
+	ObfsPassword             string
 }
 
 // renamePattern holds compiled regex and replacement string
@@ -239,7 +241,7 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) string {
 }
 
 // filterUsers filters Hysteria2 users based on HTTP username mapping and local-only tags
-func (s *Server) filterUsers(allUsers []option.Hysteria2User, httpUsername string) []option.Hysteria2User {
+func (s *Server) filterUsers(allUsers []inbound.User, httpUsername string) []inbound.User {
 	if httpUsername == "" {
 		return nil
 	}
@@ -256,10 +258,10 @@ func (s *Server) filterUsers(allUsers []option.Hysteria2User, httpUsername strin
 		allowedSet[h2Username] = true
 	}
 
-	var filtered []option.Hysteria2User
+	var filtered []inbound.User
 	for _, user := range allUsers {
-		// Skip local-only users
-		if s.state.LocalOnlyTags[user.Name] {
+		// Skip local-only outbounds
+		if s.state.LocalOnlyTags[user.Outbound] {
 			continue
 		}
 
@@ -462,7 +464,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 // buildHysteria2Link creates a hysteria2:// URL format
 // portList is a comma-separated list of ports and ranges (e.g., "443,1000-1100,8443")
-func (s *Server) buildHysteria2Link(user option.Hysteria2User, portList string) string {
+func (s *Server) buildHysteria2Link(user inbound.User, portList string) string {
 	// Use PublicAddr, fallback to SNI if not set
 	addr := s.state.PublicAddr
 	if addr == "" {
@@ -481,8 +483,8 @@ func (s *Server) buildHysteria2Link(user option.Hysteria2User, portList string) 
 	}
 	if s.state.Obfs != "" {
 		params = append(params, fmt.Sprintf("obfs=%s", s.state.Obfs))
-		if user.Password != "" {
-			params = append(params, fmt.Sprintf("obfs-password=%s", user.Password))
+		if s.state.ObfsPassword != "" {
+			params = append(params, fmt.Sprintf("obfs-password=%s", s.state.ObfsPassword))
 		}
 	}
 
@@ -490,7 +492,7 @@ func (s *Server) buildHysteria2Link(user option.Hysteria2User, portList string) 
 		link += "?" + strings.Join(params, "&")
 	}
 
-	name := user.Name
+	name := user.Outbound
 	if name != "" {
 		// Apply rename patterns
 		if len(s.renamePatterns) > 0 {
@@ -503,7 +505,7 @@ func (s *Server) buildHysteria2Link(user option.Hysteria2User, portList string) 
 }
 
 // buildHysteria2Outbound creates a sing-box Hysteria2 outbound config
-func (s *Server) buildHysteria2Outbound(user option.Hysteria2User) option.Outbound {
+func (s *Server) buildHysteria2Outbound(user inbound.User) option.Outbound {
 	// Use PublicAddr, fallback to SNI if not set
 	addr := s.state.PublicAddr
 	if addr == "" {
@@ -523,9 +525,12 @@ func (s *Server) buildHysteria2Outbound(user option.Hysteria2User) option.Outbou
 		}
 	}
 
-	tag := fmt.Sprintf("hysteria2-%s", user.Name)
-	if user.Name == "" {
+	displayName := user.Outbound
+	tag := ""
+	if displayName == "" {
 		tag = "hysteria2"
+	} else {
+		tag = fmt.Sprintf("hysteria2-%s", displayName)
 	}
 
 	hysteria2Opts := &option.Hysteria2OutboundOptions{
@@ -549,7 +554,7 @@ func (s *Server) buildHysteria2Outbound(user option.Hysteria2User) option.Outbou
 	}
 
 	if s.state.Obfs != "" {
-		obfsPassword := user.Password
+		obfsPassword := s.state.ObfsPassword
 		hysteria2Opts.Obfs = &option.Hysteria2Obfs{
 			Type:     s.state.Obfs,
 			Password: obfsPassword,

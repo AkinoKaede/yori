@@ -10,3 +10,5 @@
 *.db
 *.cache
 *.exe
+
+config.yaml

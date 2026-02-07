@@ -13,10 +13,7 @@ import (
 
 	"github.com/AkinoKaede/proxy-relay/internal/config"
 	"github.com/AkinoKaede/proxy-relay/internal/datafile"
-	"github.com/AkinoKaede/proxy-relay/internal/generator"
-	"github.com/AkinoKaede/proxy-relay/internal/server"
-	"github.com/AkinoKaede/proxy-relay/internal/subscription"
-	"github.com/AkinoKaede/proxy-relay/internal/utils"
+	"github.com/AkinoKaede/proxy-relay/internal/engine"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -93,103 +90,11 @@ func run(log log.ContextLogger, cfg *config.Config) error {
 		log.Info("data file initialized: ", cfg.DataFile)
 	}
 
-	// Initialize subscription manager
-	log.Info("Initializing subscription manager with ", len(cfg.Subscriptions), " sources")
-	subManager, err := subscription.NewManager(ctx, log, cfg)
-	if err != nil {
-		return E.Cause(err, "initialize subscription manager")
+	engineInstance := engine.New(ctx, log, cfg, dataFile)
+	if err := engineInstance.Start(); err != nil {
+		return E.Cause(err, "start engine")
 	}
-	defer subManager.Close()
-
-	// Perform initial fetch
-	log.Info("Fetching all subscriptions...")
-	if err := subManager.FetchAll(); err != nil {
-		log.Warn("Some subscriptions failed to fetch: ", err)
-	}
-
-	// Get outbounds grouped by subscription
-	outboundsBySubscription := subManager.GetOutboundsBySubscription()
-
-	// Merge all outbounds for sing-box configuration
-	outbounds := subManager.MergeAll()
-	log.Info("Merged ", len(outbounds), " outbounds from all subscriptions")
-
-	if len(outbounds) == 0 {
-		return E.New("no outbounds available, check subscription configuration")
-	}
-
-	// Build HTTP user to subscriptions mapping
-	httpUsers := make(map[string][]string)
-	for _, user := range cfg.HTTP.Users {
-		httpUsers[user.Username] = user.Subscriptions
-	}
-
-	// Generate users (filtered by subscription names)
-	users, userMapping, httpUserMapping := generator.GenerateUsers(ctx, outboundsBySubscription, httpUsers, dataFile)
-	log.Info("Generated ", len(users), " users for ", len(httpUsers), " HTTP user(s)")
-
-	// Generate sing-box configuration
-	boxConfig, err := generator.GenerateConfig(cfg, outbounds, users, userMapping)
-	if err != nil {
-		return E.Cause(err, "generate sing-box configuration")
-	}
-
-	// Start sing-box
-	boxManager := generator.NewBoxManager()
-	defer boxManager.Stop()
-
-	log.Info("Starting sing-box with single Hysteria2 inbound on port ", cfg.Hysteria2.Port)
-	if err := boxManager.Start(boxConfig); err != nil {
-		return E.Cause(err, "start sing-box")
-	}
-	log.Info("sing-box started successfully")
-
-	// Build HTTP server state
-	var sni string
-	if cfg.Hysteria2.TLS.ACME != nil && len(cfg.Hysteria2.TLS.ACME.Domain) > 0 {
-		sni = cfg.Hysteria2.TLS.ACME.Domain[0]
-	}
-
-	obfsType := ""
-	if cfg.Hysteria2.Obfs != nil {
-		obfsType = cfg.Hysteria2.Obfs.Type
-	}
-
-	serverState := &server.State{
-		Users:                    users,
-		LocalOnlyTags:            subManager.GetLocalOnlyTags(),
-		HTTPUserToHysteria2Users: httpUserMapping,
-		PublicAddr:               cfg.Hysteria2.Public.Server,
-		PublicPorts:              cfg.Hysteria2.Public.GetPorts(),
-		SNI:                      sni,
-		Obfs:                     obfsType,
-	}
-
-	// Start HTTP subscription server
-	serverCfg := &server.ServerConfig{
-		Listen: fmt.Sprintf("%s:%d", cfg.HTTP.Listen, cfg.HTTP.Port),
-		Rename: cfg.HTTP.Rename,
-	}
-	if cfg.HTTP.TLS != nil {
-		serverCfg.CertificatePath = cfg.HTTP.TLS.CertificatePath
-		serverCfg.KeyPath = cfg.HTTP.TLS.KeyPath
-	}
-
-	// Copy HTTP users (no pattern compilation needed)
-	for _, user := range cfg.HTTP.Users {
-		serverCfg.Users = append(serverCfg.Users, server.HTTPUser{
-			Username: user.Username,
-			Password: user.Password,
-		})
-	}
-
-	httpServer := server.NewServer(ctx, log, serverCfg)
-	httpServer.UpdateState(serverState)
-
-	if err := httpServer.Start(); err != nil {
-		return E.Cause(err, "start HTTP server")
-	}
-	defer httpServer.Stop()
+	defer engineInstance.Close()
 
 	// Setup reload mechanism
 	reloadChan := make(chan struct{}, 1)
@@ -202,7 +107,7 @@ func run(log log.ContextLogger, cfg *config.Config) error {
 			select {
 			case <-reloadChan:
 				log.Info("Reloading configuration...")
-				if err := reload(ctx, log, cfg, subManager, boxManager, httpServer, dataFile); err != nil {
+				if err := reload(ctx, log, cfg, engineInstance); err != nil {
 					log.Error("Reload failed: ", err)
 				} else {
 					log.Info("Reload completed successfully")
@@ -229,113 +134,19 @@ func reload(
 	ctx context.Context,
 	log log.ContextLogger,
 	cfg *config.Config,
-	subManager *subscription.Manager,
-	boxManager *generator.BoxManager,
-	httpServer *server.Server,
-	dataFile *datafile.DataFile,
+	engineInstance *engine.Engine,
 ) error {
-	// Reload configuration file
 	log.Info("Reloading configuration from file...")
 	newCfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		log.Error("Failed to reload configuration file: ", err)
 		log.Warn("Continuing with previous configuration")
-		// Use existing config
 		newCfg = cfg
-	} else {
-		log.Info("Configuration file reloaded successfully")
-		// Update configuration reference (shallow copy important fields)
-		cfg.LogLevel = newCfg.LogLevel
-		cfg.HTTP = newCfg.HTTP
-		cfg.Hysteria2 = newCfg.Hysteria2
-		// Note: We don't update Subscriptions here as subscription manager is already initialized
-		// If subscriptions changed, a full restart is needed
 	}
 
-	// Fetch updated subscriptions (even if config reload failed, try to update subscriptions)
-	if err := subManager.FetchAll(); err != nil {
-		log.Warn("Some subscriptions failed to fetch, using cached data where available: ", err)
-		// Continue anyway - we might have cached data
+	if err := engineInstance.Reload(newCfg); err != nil {
+		return E.Cause(err, "reload engine")
 	}
-
-	// Get outbounds grouped by subscription
-	outboundsBySubscription := subManager.GetOutboundsBySubscription()
-
-	// Merge outbounds for sing-box configuration
-	outbounds := subManager.MergeAll()
-	log.Info("Reloaded ", len(outbounds), " outbounds")
-
-	if len(outbounds) == 0 {
-		return E.New("no outbounds after reload")
-	}
-
-	// Build HTTP user to subscriptions mapping (may have changed)
-	httpUsers := make(map[string][]string)
-	for _, user := range newCfg.HTTP.Users {
-		httpUsers[user.Username] = user.Subscriptions
-	}
-
-	// Generate new users (filtered by subscription names)
-	users, userMapping, httpUserMapping := generator.GenerateUsers(ctx, outboundsBySubscription, httpUsers, dataFile)
-	log.Info("Generated ", len(users), " users for ", len(httpUsers), " HTTP user(s)")
-
-	// Generate new sing-box configuration
-	boxConfig, err := generator.GenerateConfig(newCfg, outbounds, users, userMapping)
-	if err != nil {
-		return E.Cause(err, "generate configuration")
-	}
-
-	// Check if configuration actually changed
-	newHash := utils.HashConfig(boxConfig)
-	if boxManager.ConfigHash() == newHash {
-		log.Info("Configuration unchanged, skipping sing-box restart")
-		// Still update HTTP server state in case user list changed
-	} else {
-		// Restart sing-box only if config changed
-		log.Info("Configuration changed, restarting sing-box...")
-		if err := boxManager.Stop(); err != nil {
-			log.Warn("Error stopping sing-box: ", err)
-		}
-
-		if err := boxManager.Start(boxConfig); err != nil {
-			return E.Cause(err, "start sing-box")
-		}
-		log.Info("sing-box restarted successfully")
-	}
-
-	// Update HTTP server users and rename patterns
-	var httpServerUsers []server.HTTPUser
-	for _, user := range newCfg.HTTP.Users {
-		httpServerUsers = append(httpServerUsers, server.HTTPUser{
-			Username: user.Username,
-			Password: user.Password,
-		})
-	}
-	httpServer.UpdateUsers(httpServerUsers)
-	httpServer.UpdateRenamePatterns(newCfg.HTTP.Rename)
-
-	// Update HTTP server state
-	var sni string
-	if newCfg.Hysteria2.TLS.ACME != nil && len(newCfg.Hysteria2.TLS.ACME.Domain) > 0 {
-		sni = newCfg.Hysteria2.TLS.ACME.Domain[0]
-	}
-
-	obfsType := ""
-	if newCfg.Hysteria2.Obfs != nil {
-		obfsType = newCfg.Hysteria2.Obfs.Type
-	}
-
-	serverState := &server.State{
-		Users:                    users,
-		LocalOnlyTags:            subManager.GetLocalOnlyTags(),
-		HTTPUserToHysteria2Users: httpUserMapping,
-		PublicAddr:               newCfg.Hysteria2.Public.Server,
-		PublicPorts:              newCfg.Hysteria2.Public.GetPorts(),
-		SNI:                      sni,
-		Obfs:                     obfsType,
-	}
-	httpServer.UpdateState(serverState)
-
 	return nil
 }
 

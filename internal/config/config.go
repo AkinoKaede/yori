@@ -87,6 +87,7 @@ type Hysteria2Config struct {
 // Port ranges are automatically converted to hyphen format (443-453) in hysteria2:// links
 type PublicConfig struct {
 	Server string   `yaml:"server"`
+	SNI    string   `yaml:"sni"`
 	Port   uint16   `yaml:"port,omitempty"`  // Single port
 	Ports  []string `yaml:"ports,omitempty"` // Multiple ports or ranges (e.g., ["443", "1000:1100"])
 }
@@ -228,13 +229,14 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate public config
-	// public.server is optional - if not set, will use SNI from ACME domain
+	// public.server is optional - if not set, will use public.sni or ACME domain
 	if c.Hysteria2.Public.Server == "" {
-		// Use first ACME domain as server if available
-		if c.Hysteria2.TLS.ACME != nil && len(c.Hysteria2.TLS.ACME.Domain) > 0 {
+		if c.Hysteria2.Public.SNI != "" {
+			c.Hysteria2.Public.Server = c.Hysteria2.Public.SNI
+		} else if c.Hysteria2.TLS.ACME != nil && len(c.Hysteria2.TLS.ACME.Domain) > 0 {
 			c.Hysteria2.Public.Server = c.Hysteria2.TLS.ACME.Domain[0]
 		} else {
-			return E.New("hysteria2.public.server is required (or use ACME with domain)")
+			return E.New("hysteria2.public.server is required (or use public.sni or ACME with domain)")
 		}
 	}
 	// Merge port and ports, default to listen port if neither specified
