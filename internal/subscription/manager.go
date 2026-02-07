@@ -199,7 +199,7 @@ func (m *Manager) fetchFromHTTP(sub *Subscription) error {
 		if version == "" {
 			version = "unknown"
 		}
-		req.Header.Set("User-Agent", fmt.Sprintf("proxy-relay/%s (sing-box %s; like serenity/1.1.0-beta.3; Clash compatible)", version, constant.CoreVersion()))
+		req.Header.Set("User-Agent", fmt.Sprintf("proxy-relay/%s (sing-box %s; like serenity/%s; Clash compatible)", version, constant.CoreVersion(), constant.LikeSerenityVersion))
 	}
 
 	// Set ETag for conditional request

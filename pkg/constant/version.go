@@ -6,7 +6,9 @@ import (
 )
 
 var (
-	Version                   = ""
+	Version             = ""
+	LikeSerenityVersion = "1.1.0-beta.3"
+
 	coreVersion               string
 	initializeCoreVersionOnce sync.Once
 )
