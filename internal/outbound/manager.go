@@ -107,6 +107,7 @@ func (m *Manager) Reload(outboundOptions []option.Outbound) error {
 	nextHashes := make(map[string]string, len(outboundOptions))
 	nextOutbounds := make(map[string]adapter.Outbound, len(outboundOptions))
 	nextOrdered := make([]adapter.Outbound, 0, len(outboundOptions))
+	createdOutbounds := make(map[string]adapter.Outbound)
 
 	for _, outboundOption := range outboundOptions {
 		if outboundOption.Tag == "" {
@@ -122,34 +123,37 @@ func (m *Manager) Reload(outboundOptions []option.Outbound) error {
 				nextOrdered = append(nextOrdered, existing)
 				continue
 			}
-			if err := common.Close(existing); err != nil {
-				m.logger.Warn("close outbound[", outboundOption.Tag, "]: ", err)
-			}
 		}
 
 		created, err := m.registry.CreateOutbound(m.ctx, nil, m.logger, outboundOption.Tag, outboundOption.Type, outboundOption.Options)
 		if err != nil {
+			m.closeCreated(createdOutbounds)
 			return E.Cause(err, "create outbound[", outboundOption.Tag, "]")
 		}
 		if err := adapter.LegacyStart(created, adapter.StartStateInitialize); err != nil {
+			m.closeCreated(createdOutbounds)
 			return E.Cause(err, "start outbound[", outboundOption.Tag, "]")
 		}
 		if err := adapter.LegacyStart(created, adapter.StartStateStart); err != nil {
+			m.closeCreated(createdOutbounds)
 			return E.Cause(err, "start outbound[", outboundOption.Tag, "]")
 		}
 		if err := adapter.LegacyStart(created, adapter.StartStatePostStart); err != nil {
+			m.closeCreated(createdOutbounds)
 			return E.Cause(err, "start outbound[", outboundOption.Tag, "]")
 		}
 		if err := adapter.LegacyStart(created, adapter.StartStateStarted); err != nil {
+			m.closeCreated(createdOutbounds)
 			return E.Cause(err, "start outbound[", outboundOption.Tag, "]")
 		}
 
+		createdOutbounds[outboundOption.Tag] = created
 		nextOutbounds[outboundOption.Tag] = created
 		nextOrdered = append(nextOrdered, created)
 	}
 
 	for tag, existing := range m.outbounds {
-		if _, ok := nextOutbounds[tag]; ok {
+		if next, ok := nextOutbounds[tag]; ok && next == existing {
 			continue
 		}
 		if err := common.Close(existing); err != nil {
@@ -162,6 +166,14 @@ func (m *Manager) Reload(outboundOptions []option.Outbound) error {
 	m.hashes = nextHashes
 
 	return nil
+}
+
+func (m *Manager) closeCreated(created map[string]adapter.Outbound) {
+	for tag, ob := range created {
+		if err := common.Close(ob); err != nil {
+			m.logger.Warn("close outbound[", tag, "]: ", err)
+		}
+	}
 }
 
 // Remove removes an outbound by tag.
