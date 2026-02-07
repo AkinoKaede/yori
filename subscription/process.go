@@ -74,8 +74,10 @@ func NewProcessOptions(opts config.OutboundProcessOptions) (*ProcessOptions, err
 }
 
 // Process applies filtering, renaming, and rewriting to outbounds
-func (p *ProcessOptions) Process(outbounds []option.Outbound) []option.Outbound {
+// Returns processed outbounds and a set of local-only tags
+func (p *ProcessOptions) Process(outbounds []option.Outbound) ([]option.Outbound, map[string]bool) {
 	var result []option.Outbound
+	localOnlyTags := make(map[string]bool)
 	tagChanges := make(map[string]string) // Track tag changes for updating references
 
 	for _, outbound := range outbounds {
@@ -88,6 +90,11 @@ func (p *ProcessOptions) Process(outbounds []option.Outbound) []option.Outbound 
 		// If remove is set, skip this outbound
 		if p.Remove {
 			continue
+		}
+
+		// If local_only is set, mark this outbound
+		if p.LocalOnly {
+			localOnlyTags[outbound.Tag] = true
 		}
 
 		originalTag := outbound.Tag
@@ -108,6 +115,11 @@ func (p *ProcessOptions) Process(outbounds []option.Outbound) []option.Outbound 
 		// Track tag changes
 		if originalTag != outbound.Tag {
 			tagChanges[originalTag] = outbound.Tag
+			// Update local-only tags if tag changed
+			if localOnlyTags[originalTag] {
+				delete(localOnlyTags, originalTag)
+				localOnlyTags[outbound.Tag] = true
+			}
 		}
 
 		// Apply rewrites based on outbound type
@@ -121,7 +133,7 @@ func (p *ProcessOptions) Process(outbounds []option.Outbound) []option.Outbound 
 		result = updateTagReferences(result, tagChanges)
 	}
 
-	return result
+	return result, localOnlyTags
 }
 
 // shouldProcess determines if an outbound matches the filter criteria

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AkinoKaede/proxy-relay/internal"
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -14,10 +15,11 @@ import (
 
 // BoxManager manages the sing-box instance lifecycle
 type BoxManager struct {
-	box    *box.Box
-	ctx    context.Context
-	cancel context.CancelFunc
-	mu     sync.Mutex
+	box        *box.Box
+	ctx        context.Context
+	cancel     context.CancelFunc
+	configHash string
+	mu         sync.Mutex
 }
 
 // NewBoxManager creates a new sing-box manager
@@ -57,6 +59,8 @@ func (m *BoxManager) Start(opts *option.Options) error {
 	}
 
 	m.box = instance
+	// Store config hash for change detection
+	m.configHash = internal.HashConfig(opts)
 	return nil
 }
 
@@ -105,4 +109,12 @@ func (m *BoxManager) IsRunning() bool {
 	defer m.mu.Unlock()
 
 	return m.box != nil
+}
+
+// ConfigHash returns the hash of the current configuration
+func (m *BoxManager) ConfigHash() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.configHash
 }

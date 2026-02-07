@@ -154,13 +154,12 @@ func run(log log.ContextLogger, cfg *config.Config) error {
 	}
 
 	serverState := &server.State{
-		Users:                    users,
-		LocalOnlyTags:            subManager.GetLocalOnlyTags(),
-		HTTPUserToHysteria2Users: httpUserMapping,
-		PublicAddr:               cfg.Hysteria2.Public.Server,
-		PublicPorts:              cfg.Hysteria2.Public.Ports,
-		SNI:                      sni,
-		Obfs:                     obfsType,
+		Users:         users,
+		LocalOnlyTags: subManager.GetLocalOnlyTags(),
+		PublicAddr:    cfg.Hysteria2.Public.Server,
+		PublicPorts:   cfg.Hysteria2.Public.Ports,
+		SNI:           sni,
+		Obfs:          obfsType,
 	}
 
 	// Start HTTP subscription server
@@ -301,13 +300,13 @@ func reload(
 	}
 
 	serverState := &server.State{
-		Users:                    users,
-		LocalOnlyTags:            subManager.GetLocalOnlyTags(),
-		HTTPUserToHysteria2Users: httpUserMapping,
-		PublicAddr:               cfg.Hysteria2.Public.Server,
-		PublicPorts:              cfg.Hysteria2.Public.Ports,
-		SNI:                      sni,
-		Obfs:                     obfsType,
+		Users:                     users,
+		LocalOnlyTags:             subManager.GetLocalOnlyTags(),
+		HTTPUserToHysteria2Users:  httpUserMapping,
+		PublicAddr:                cfg.Hysteria2.Public.Server,
+		PublicPorts:               cfg.Hysteria2.Public.Ports,
+		SNI:                       sni,
+		Obfs:                      obfsType,
 	}
 	httpServer.UpdateState(serverState)
 

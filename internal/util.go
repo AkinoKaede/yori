@@ -3,11 +3,15 @@
 package internal
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/sagernet/sing-box/option"
 )
 
 // GeneratePassword generates a stable password from a tag using SHA256
@@ -16,6 +20,24 @@ func GeneratePassword(tag, salt string) string {
 	h.Write([]byte(tag + salt))
 	hash := h.Sum(nil)
 	return hex.EncodeToString(hash)[:32]
+}
+
+// GenerateRandomPassword generates a random password of specified length
+func GenerateRandomPassword(length int) string {
+	if length <= 0 {
+		length = 16
+	}
+
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to a hash-based approach if random fails
+		h := sha256.New()
+		h.Write([]byte("fallback"))
+		hash := h.Sum(nil)
+		return hex.EncodeToString(hash)[:length]
+	}
+
+	return hex.EncodeToString(b)[:length]
 }
 
 // RemoveEmoji removes emoji characters from a string
@@ -78,4 +100,21 @@ func IsASCII(s string) bool {
 		}
 	}
 	return true
+}
+
+// HashConfig generates a SHA256 hash of a sing-box configuration
+// Used to detect if configuration has actually changed before reloading
+func HashConfig(opts *option.Options) string {
+	if opts == nil {
+		return ""
+	}
+
+	// Marshal to JSON for consistent hashing
+	data, err := json.Marshal(opts)
+	if err != nil {
+		return ""
+	}
+
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
 }

@@ -4,10 +4,12 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -20,40 +22,92 @@ import (
 
 // ServerConfig holds the server configuration
 type ServerConfig struct {
-	Listen string
+	Listen          string
+	Rename          map[string]string
+	CertificatePath string
+	KeyPath         string
+	Users           []HTTPUser
+}
+
+// HTTPUser for Basic Auth and filtering
+type HTTPUser struct {
+	Username string
+	Password string
+	Patterns []*regexp.Regexp
 }
 
 // State holds the server state information
 type State struct {
-	Users       []option.Hysteria2User
-	PublicAddr  string
-	PublicPorts []uint16
-	SNI         string
-	Obfs        string
+	Users                    []option.Hysteria2User
+	LocalOnlyTags            map[string]bool     // Tags of local-only outbounds (not available to users)
+	HTTPUserToHysteria2Users map[string][]string // HTTP username -> Hysteria2 usernames mapping
+	PublicAddr               string
+	PublicPorts              []uint16
+	SNI                      string
+	Obfs                     string
+}
+
+// renamePattern holds compiled regex and replacement string
+type renamePattern struct {
+	regex *regexp.Regexp
+	repl  string
 }
 
 // Server represents the HTTP subscription server
 type Server struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	logger  logger.Logger
-	config  *ServerConfig
-	server  *http.Server
-	state   *State
-	stateMu sync.RWMutex
-	started bool
-	startMu sync.Mutex
+	ctx            context.Context
+	cancel         context.CancelFunc
+	logger         logger.Logger
+	config         *ServerConfig
+	server         *http.Server
+	state          *State
+	stateMu        sync.RWMutex
+	renamePatterns []renamePattern
+	users          []HTTPUser
+	started        bool
+	startMu        sync.Mutex
 }
 
 // NewServer creates a new subscription server instance
 func NewServer(ctx context.Context, logger logger.Logger, cfg *ServerConfig) *Server {
 	serverCtx, cancel := context.WithCancel(ctx)
+
+	// Compile rename patterns
+	var renamePatterns []renamePattern
+	for pattern, repl := range cfg.Rename {
+		regex, err := regexp.Compile(pattern)
+		if err != nil {
+			logger.Warn("invalid rename pattern: ", pattern, ": ", err)
+			continue
+		}
+		renamePatterns = append(renamePatterns, renamePattern{
+			regex: regex,
+			repl:  repl,
+		})
+	}
+
+	// Compile user patterns
+	var users []HTTPUser
+	for _, user := range cfg.Users {
+		var patterns []*regexp.Regexp
+		for _, p := range user.Patterns {
+			patterns = append(patterns, p)
+		}
+		users = append(users, HTTPUser{
+			Username: user.Username,
+			Password: user.Password,
+			Patterns: patterns,
+		})
+	}
+
 	return &Server{
-		ctx:    serverCtx,
-		cancel: cancel,
-		logger: logger,
-		config: cfg,
-		state:  &State{},
+		ctx:            serverCtx,
+		cancel:         cancel,
+		logger:         logger,
+		config:         cfg,
+		state:          &State{},
+		renamePatterns: renamePatterns,
+		users:          users,
 	}
 }
 
@@ -69,6 +123,7 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/sub/base64", s.handleBase64)
 	mux.HandleFunc("/sub/singbox", s.handleSingbox)
+	mux.HandleFunc("/sub", s.handleSub)
 	mux.HandleFunc("/", s.handleIndex)
 
 	s.server = &http.Server{
@@ -81,11 +136,23 @@ func (s *Server) Start() error {
 		return E.Cause(err, "failed to listen")
 	}
 
-	s.logger.Info("HTTP server listening on ", s.config.Listen)
+	// Check if TLS is configured
+	useTLS := s.config.CertificatePath != "" && s.config.KeyPath != ""
+	if useTLS {
+		s.logger.Info("HTTPS server listening on ", s.config.Listen)
+	} else {
+		s.logger.Info("HTTP server listening on ", s.config.Listen)
+	}
 	s.started = true
 
 	go func() {
-		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {
+		var err error
+		if useTLS {
+			err = s.server.ServeTLS(listener, s.config.CertificatePath, s.config.KeyPath)
+		} else {
+			err = s.server.Serve(listener)
+		}
+		if err != nil && err != http.ErrServerClosed {
 			s.logger.Error("server error: ", err)
 		}
 	}()
@@ -124,8 +191,96 @@ func (s *Server) UpdateState(state *State) {
 	s.state = state
 }
 
+// authenticate checks HTTP Basic Auth and returns the authenticated user's username
+// If no users configured, returns "user" as default
+func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) string {
+	// If no users configured, allow access as default "user"
+	if len(s.users) == 0 {
+		return "user"
+	}
+
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		w.Header().Set("WWW-Authenticate", `Basic realm="Subscription"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return ""
+	}
+
+	// Find matching user with constant-time comparison
+	for i := range s.users {
+		user := &s.users[i]
+		usernameMatch := subtle.ConstantTimeCompare([]byte(user.Username), []byte(username)) == 1
+		passwordMatch := subtle.ConstantTimeCompare([]byte(user.Password), []byte(password)) == 1
+		if usernameMatch && passwordMatch {
+			return username
+		}
+	}
+
+	w.Header().Set("WWW-Authenticate", `Basic realm="Subscription"`)
+	http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	return ""
+}
+
+// filterUsers filters Hysteria2 users based on HTTP username mapping and local-only tags
+func (s *Server) filterUsers(allUsers []option.Hysteria2User, httpUsername string) []option.Hysteria2User {
+	if httpUsername == "" {
+		return nil
+	}
+
+	// Get the list of Hysteria2 usernames this HTTP user can access
+	allowedH2Users, exists := s.state.HTTPUserToHysteria2Users[httpUsername]
+	if !exists || len(allowedH2Users) == 0 {
+		return nil
+	}
+
+	// Create a set for fast lookup
+	allowedSet := make(map[string]bool)
+	for _, h2Username := range allowedH2Users {
+		allowedSet[h2Username] = true
+	}
+
+	var filtered []option.Hysteria2User
+	for _, user := range allUsers {
+		// Skip local-only users
+		if s.state.LocalOnlyTags[user.Name] {
+			continue
+		}
+
+		// Check if this user is in the allowed list
+		if allowedSet[user.Name] {
+			filtered = append(filtered, user)
+		}
+	}
+	return filtered
+}
+
+// applyRename applies rename patterns to a tag
+func (s *Server) applyRename(tag string) string {
+	for _, pattern := range s.renamePatterns {
+		tag = pattern.regex.ReplaceAllString(tag, pattern.repl)
+	}
+	return strings.TrimSpace(tag)
+}
+
+// detectFormat determines subscription format based on User-Agent
+func detectFormat(userAgent string) string {
+	// Check for sing-box family apps
+	if strings.Contains(userAgent, "sing-box") ||
+		strings.HasPrefix(userAgent, "SF") { // SFA/SFI/SFM/SFT
+		return "singbox"
+	}
+	// Default to base64 for Clash and other clients
+	return "base64"
+}
+
 // handleBase64 generates hysteria2:// links and returns them base64 encoded
 func (s *Server) handleBase64(w http.ResponseWriter, r *http.Request) {
+	// Authenticate user
+	httpUsername := s.authenticate(w, r)
+	if httpUsername == "" {
+		return // Authentication failed
+	}
+
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 
@@ -134,8 +289,15 @@ func (s *Server) handleBase64(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Filter users based on HTTP username mapping
+	filteredUsers := s.filterUsers(s.state.Users, httpUsername)
+	if len(filteredUsers) == 0 {
+		http.Error(w, "no users matched filter", http.StatusNotFound)
+		return
+	}
+
 	var links []string
-	for _, user := range s.state.Users {
+	for _, user := range filteredUsers {
 		for _, port := range s.state.PublicPorts {
 			link := s.buildHysteria2Link(user, port)
 			links = append(links, link)
@@ -151,8 +313,26 @@ func (s *Server) handleBase64(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(encoded))
 }
 
+// handleSub auto-detects format based on User-Agent and returns appropriate subscription
+func (s *Server) handleSub(w http.ResponseWriter, r *http.Request) {
+	userAgent := r.Header.Get("User-Agent")
+	format := detectFormat(userAgent)
+
+	if format == "singbox" {
+		s.handleSingbox(w, r)
+	} else {
+		s.handleBase64(w, r)
+	}
+}
+
 // handleSingbox returns JSON with outbounds array
 func (s *Server) handleSingbox(w http.ResponseWriter, r *http.Request) {
+	// Authenticate user
+	httpUsername := s.authenticate(w, r)
+	if httpUsername == "" {
+		return // Authentication failed
+	}
+
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 
@@ -161,12 +341,21 @@ func (s *Server) handleSingbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Filter users based on HTTP username mapping
+	filteredUsers := s.filterUsers(s.state.Users, httpUsername)
+	if len(filteredUsers) == 0 {
+		http.Error(w, "no users matched filter", http.StatusNotFound)
+		return
+	}
+
 	var outbounds []option.Outbound
-	for _, user := range s.state.Users {
-		for _, port := range s.state.PublicPorts {
-			outbound := s.buildHysteria2Outbound(user, port)
-			outbounds = append(outbounds, outbound)
+	for _, user := range filteredUsers {
+		outbound := s.buildHysteria2Outbound(user)
+		// Apply rename patterns
+		if len(s.renamePatterns) > 0 {
+			outbound.Tag = s.applyRename(outbound.Tag)
 		}
+		outbounds = append(outbounds, outbound)
 	}
 
 	response := map[string]interface{}{
@@ -279,31 +468,51 @@ func (s *Server) buildHysteria2Link(user option.Hysteria2User, port uint16) stri
 		link += "?" + strings.Join(params, "&")
 	}
 
-	if user.Name != "" {
-		link += "#" + user.Name
+	name := user.Name
+	if name != "" {
+		// Apply rename patterns
+		if len(s.renamePatterns) > 0 {
+			name = s.applyRename(name)
+		}
+		link += "#" + name
 	}
 
 	return link
 }
 
 // buildHysteria2Outbound creates a sing-box Hysteria2 outbound config
-func (s *Server) buildHysteria2Outbound(user option.Hysteria2User, port uint16) option.Outbound {
+func (s *Server) buildHysteria2Outbound(user option.Hysteria2User) option.Outbound {
 	addr := s.state.PublicAddr
 	if addr == "" {
 		addr = "127.0.0.1"
 	}
 
-	tag := fmt.Sprintf("hysteria2-%s-%d", user.Name, port)
+	// Use first port as default, or 0 if no ports configured
+	defaultPort := uint16(0)
+	if len(s.state.PublicPorts) > 0 {
+		defaultPort = s.state.PublicPorts[0]
+	}
+
+	tag := fmt.Sprintf("hysteria2-%s", user.Name)
 	if user.Name == "" {
-		tag = fmt.Sprintf("hysteria2-%d", port)
+		tag = "hysteria2"
 	}
 
 	hysteria2Opts := &option.Hysteria2OutboundOptions{
 		ServerOptions: option.ServerOptions{
 			Server:     addr,
-			ServerPort: port,
+			ServerPort: defaultPort,
 		},
 		Password: user.Password,
+	}
+
+	// Set server_ports for multi-port hopping
+	if len(s.state.PublicPorts) > 0 {
+		serverPorts := make([]string, len(s.state.PublicPorts))
+		for i, port := range s.state.PublicPorts {
+			serverPorts[i] = fmt.Sprintf("%d", port)
+		}
+		hysteria2Opts.ServerPorts = serverPorts
 	}
 
 	if s.state.SNI != "" {

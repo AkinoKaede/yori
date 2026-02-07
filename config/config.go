@@ -13,6 +13,9 @@ import (
 
 // Config is the main configuration structure
 type Config struct {
+	LogLevel       string          `yaml:"log_level"`
+	CacheFile      string          `yaml:"cache_file"`
+	DataFile       string          `yaml:"data_file"`
 	Subscriptions  []Subscription  `yaml:"subscriptions"`
 	ReloadInterval Duration        `yaml:"reload_interval"`
 	HTTP           HTTPConfig      `yaml:"http"`
@@ -36,6 +39,7 @@ type OutboundProcessOptions struct {
 	ExcludeType           []string                         `yaml:"exclude_type"`
 	Invert                bool                             `yaml:"invert"`
 	Remove                bool                             `yaml:"remove"`
+	LocalOnly             bool                             `yaml:"local_only"` // Mark matched outbounds as local-only (not relayed to users)
 	Rename                map[string]string                `yaml:"rename"`
 	RemoveEmoji           bool                             `yaml:"remove_emoji"`
 	RewriteMultiplex      *option.OutboundMultiplexOptions `yaml:"rewrite_multiplex"`
@@ -52,14 +56,24 @@ type RewriteUTLSOptions struct {
 
 // HTTPConfig for the HTTP subscription server
 type HTTPConfig struct {
-	Listen string `yaml:"listen"`
-	Port   uint16 `yaml:"port"`
+	Listen string            `yaml:"listen"`
+	Port   uint16            `yaml:"port"`
+	Rename map[string]string `yaml:"rename"`
+	TLS    *TLSConfig        `yaml:"tls"`
+	Users  []HTTPUser        `yaml:"users"`
+}
+
+// HTTPUser for Basic Auth and user filtering
+type HTTPUser struct {
+	Username string   `yaml:"username"`
+	Password string   `yaml:"password"`
+	Pattern  []string `yaml:"pattern"` // Regex patterns to filter Hysteria2 users
 }
 
 // Hysteria2Config for Hysteria2 inbound configuration
 type Hysteria2Config struct {
 	Listen   string         `yaml:"listen"`
-	Ports    []uint16       `yaml:"ports"`
+	Port     uint16         `yaml:"port"`
 	UpMbps   int            `yaml:"up_mbps"`
 	DownMbps int            `yaml:"down_mbps"`
 	Public   PublicConfig   `yaml:"public"`
@@ -181,8 +195,8 @@ func (c *Config) Validate() error {
 	if c.Hysteria2.Listen == "" {
 		c.Hysteria2.Listen = "::"
 	}
-	if len(c.Hysteria2.Ports) == 0 {
-		return E.New("hysteria2: at least one port is required")
+	if c.Hysteria2.Port == 0 {
+		return E.New("hysteria2: port is required")
 	}
 	if c.Hysteria2.UpMbps == 0 {
 		c.Hysteria2.UpMbps = 100
@@ -217,9 +231,9 @@ func (c *Config) Validate() error {
 	if c.Hysteria2.Public.Server == "" {
 		return E.New("hysteria2.public.server is required for generating share links")
 	}
-	// Default to all listen ports
+	// Default to listen port if no public ports specified
 	if len(c.Hysteria2.Public.Ports) == 0 {
-		c.Hysteria2.Public.Ports = c.Hysteria2.Ports
+		c.Hysteria2.Public.Ports = []uint16{c.Hysteria2.Port}
 	}
 
 	return nil

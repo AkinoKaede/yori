@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AkinoKaede/proxy-relay/cachefile"
 	"github.com/AkinoKaede/proxy-relay/config"
 	"github.com/AkinoKaede/proxy-relay/subscription/parser"
 	"github.com/sagernet/sing-box/option"
@@ -25,6 +26,7 @@ type Manager struct {
 	logger        logger.Logger
 	subscriptions []*Subscription
 	httpClient    *http.Client
+	cacheFile     *cachefile.CacheFile
 	mu            sync.RWMutex
 }
 
@@ -36,10 +38,11 @@ type Subscription struct {
 	UpdateInterval time.Duration
 	processes      []*ProcessOptions
 
-	rawOutbounds []option.Outbound // Fetched from source
-	Outbounds    []option.Outbound // After processing
-	LastUpdated  time.Time
-	LastEtag     string
+	rawOutbounds  []option.Outbound // Fetched from source
+	Outbounds     []option.Outbound // After processing
+	LocalOnlyTags map[string]bool   // Tags of outbounds marked as local-only
+	LastUpdated   time.Time
+	LastEtag      string
 }
 
 // NewManager creates a new subscription manager
@@ -63,15 +66,53 @@ func NewManager(ctx context.Context, logger logger.Logger, cfg *config.Config) (
 			UserAgent:      subCfg.UserAgent,
 			UpdateInterval: subCfg.UpdateInterval.Duration(),
 			processes:      processes,
+			LocalOnlyTags:  make(map[string]bool),
 		})
 
 		logger.Info("loaded subscription[", i, "]: ", subCfg.Name, " (", subCfg.URL, ")")
+	}
+
+	// Initialize cache file
+	var cache *cachefile.CacheFile
+	if cfg.CacheFile != "" {
+		cache = cachefile.New(ctx, cfg.CacheFile)
+		if err := cache.PreStart(); err != nil {
+			return nil, E.Cause(err, "prepare cache file")
+		}
+		if err := cache.Start(); err != nil {
+			return nil, E.Cause(err, "start cache file")
+		}
+		logger.Info("cache file initialized: ", cfg.CacheFile)
+
+		// Load cached subscriptions
+		for _, sub := range subscriptions {
+			sub.LocalOnlyTags = make(map[string]bool)
+			cached := cache.LoadSubscription(ctx, sub.Name)
+			if cached != nil {
+				sub.rawOutbounds = cached.Content
+				sub.LastUpdated = cached.LastUpdated
+				sub.LastEtag = cached.LastEtag
+				// Process cached outbounds
+				outbounds := sub.rawOutbounds
+				for _, proc := range sub.processes {
+					var localTags map[string]bool
+					outbounds, localTags = proc.Process(outbounds)
+					// Merge local-only tags
+					for tag := range localTags {
+						sub.LocalOnlyTags[tag] = true
+					}
+				}
+				sub.Outbounds = outbounds
+				logger.Info("loaded ", len(sub.Outbounds), " cached outbounds for ", sub.Name)
+			}
+		}
 	}
 
 	return &Manager{
 		ctx:           ctx,
 		logger:        logger,
 		subscriptions: subscriptions,
+		cacheFile:     cache,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -178,6 +219,17 @@ func (m *Manager) fetchFromHTTP(sub *Subscription) error {
 
 	m.logger.Info("fetched subscription ", sub.Name, ": ", len(sub.rawOutbounds), " raw → ", len(sub.Outbounds), " processed")
 
+	// Save to cache
+	if m.cacheFile != nil {
+		if err := m.cacheFile.StoreSubscription(m.ctx, sub.Name, &cachefile.Subscription{
+			Content:     sub.rawOutbounds,
+			LastUpdated: sub.LastUpdated,
+			LastEtag:    sub.LastEtag,
+		}); err != nil {
+			m.logger.Warn("failed to cache subscription ", sub.Name, ": ", err)
+		}
+	}
+
 	return nil
 }
 
@@ -217,16 +269,33 @@ func (m *Manager) fetchFromFile(sub *Subscription) error {
 
 	m.logger.Info("fetched subscription ", sub.Name, " from file: ", len(sub.rawOutbounds), " raw → ", len(sub.Outbounds), " processed")
 
+	// Save to cache
+	if m.cacheFile != nil {
+		if err := m.cacheFile.StoreSubscription(m.ctx, sub.Name, &cachefile.Subscription{
+			Content:     sub.rawOutbounds,
+			LastUpdated: sub.LastUpdated,
+			LastEtag:    sub.LastEtag,
+		}); err != nil {
+			m.logger.Warn("failed to cache subscription ", sub.Name, ": ", err)
+		}
+	}
+
 	return nil
 }
 
 // processSubscription applies process pipeline to a subscription
 func (m *Manager) processSubscription(sub *Subscription) {
 	outbounds := sub.rawOutbounds
+	sub.LocalOnlyTags = make(map[string]bool)
 
 	// Apply each process step
 	for _, proc := range sub.processes {
-		outbounds = proc.Process(outbounds)
+		var localTags map[string]bool
+		outbounds, localTags = proc.Process(outbounds)
+		// Merge local-only tags
+		for tag := range localTags {
+			sub.LocalOnlyTags[tag] = true
+		}
 	}
 
 	sub.Outbounds = outbounds
@@ -249,6 +318,42 @@ func (m *Manager) MergeAll() []option.Outbound {
 	return merged
 }
 
+// MergeAllNonLocal merges all non-local-only outbounds for user subscriptions
+func (m *Manager) MergeAllNonLocal() []option.Outbound {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var merged []option.Outbound
+
+	for _, sub := range m.subscriptions {
+		for _, outbound := range sub.Outbounds {
+			// Skip if marked as local-only
+			if !sub.LocalOnlyTags[outbound.Tag] {
+				merged = append(merged, outbound)
+			}
+		}
+	}
+
+	// Deduplicate tags to avoid conflicts
+	merged = deduplicateOutboundTags(merged)
+
+	return merged
+}
+
+// GetLocalOnlyTags returns a merged map of all local-only tags from all subscriptions
+func (m *Manager) GetLocalOnlyTags() map[string]bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	localTags := make(map[string]bool)
+	for _, sub := range m.subscriptions {
+		for tag := range sub.LocalOnlyTags {
+			localTags[tag] = true
+		}
+	}
+	return localTags
+}
+
 // GetSubscriptions returns a copy of all subscriptions for inspection
 func (m *Manager) GetSubscriptions() []*Subscription {
 	m.mu.RLock()
@@ -260,6 +365,9 @@ func (m *Manager) GetSubscriptions() []*Subscription {
 // Close cleans up the manager
 func (m *Manager) Close() error {
 	m.httpClient.CloseIdleConnections()
+	if m.cacheFile != nil {
+		return m.cacheFile.Close()
+	}
 	return nil
 }
 

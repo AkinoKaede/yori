@@ -3,8 +3,6 @@
 package generator
 
 import (
-	"fmt"
-
 	"github.com/AkinoKaede/proxy-relay/config"
 	"github.com/sagernet/sing-box/option"
 )
@@ -16,27 +14,27 @@ func GenerateConfig(
 	users []option.Hysteria2User,
 	userToOutbound map[string]string,
 ) (*option.Options, error) {
+	logLevel := cfg.LogLevel
+	if logLevel == "" {
+		logLevel = "info"
+	}
 	opts := &option.Options{
 		Log: &option.LogOptions{
-			Level: "info",
+			Level: logLevel,
 		},
 	}
 
-	// Build inbounds (one per port)
-	inbounds := make([]option.Inbound, 0, len(cfg.Hysteria2.Ports))
-	for _, port := range cfg.Hysteria2.Ports {
-		inbound, err := buildHysteria2Inbound(cfg, port, users)
-		if err != nil {
-			return nil, err
-		}
-		inbounds = append(inbounds, inbound)
+	// Build single Hysteria2 inbound
+	inbound, err := buildHysteria2Inbound(cfg, users)
+	if err != nil {
+		return nil, err
 	}
 
 	// Set outbounds
 	opts.Outbounds = outbounds
 
-	// Set inbounds
-	opts.Inbounds = inbounds
+	// Set inbounds (only one Hysteria2 inbound)
+	opts.Inbounds = []option.Inbound{inbound}
 
 	// Build route
 	opts.Route = buildRoute(userToOutbound)
@@ -45,7 +43,7 @@ func GenerateConfig(
 }
 
 // buildHysteria2Inbound creates a Hysteria2 inbound configuration
-func buildHysteria2Inbound(cfg *config.Config, port uint16, users []option.Hysteria2User) (option.Inbound, error) {
+func buildHysteria2Inbound(cfg *config.Config, users []option.Hysteria2User) (option.Inbound, error) {
 	// Configure TLS
 	tlsOpts, err := buildTLSOptions(cfg)
 	if err != nil {
@@ -55,7 +53,7 @@ func buildHysteria2Inbound(cfg *config.Config, port uint16, users []option.Hyste
 	// Build Hysteria2 options
 	hysteria2Opts := &option.Hysteria2InboundOptions{
 		ListenOptions: option.ListenOptions{
-			ListenPort: port,
+			ListenPort: cfg.Hysteria2.Port,
 		},
 		UpMbps:   cfg.Hysteria2.UpMbps,
 		DownMbps: cfg.Hysteria2.DownMbps,
@@ -75,7 +73,7 @@ func buildHysteria2Inbound(cfg *config.Config, port uint16, users []option.Hyste
 
 	inbound := option.Inbound{
 		Type: "hysteria2",
-		Tag:  fmt.Sprintf("hy2-in-%d", port),
+		Tag:  "hy2-in",
 	}
 	inbound.Options = hysteria2Opts
 

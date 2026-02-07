@@ -1,3 +1,9 @@
+# Log level: trace, debug, info, warn, error, fatal, panic
+log_level: "info"
+
+# Cache file for subscription data (improves startup time)
+cache_file: "cache.db"
+
 # Multiple subscription sources with filtering and processing
 subscriptions:
   # Primary subscription with comprehensive filtering
