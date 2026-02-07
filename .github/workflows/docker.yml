@@ -46,9 +46,10 @@ jobs:
         with:
           ref: ${{ steps.ref.outputs.ref }}
       - name: Prepare
+        id: prep
         run: |
           platform=${{ matrix.platform }}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+          echo "platform_pair=${platform//\//-}" >> $GITHUB_OUTPUT
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
       - name: Setup Docker Buildx
@@ -82,8 +83,84 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ env.PLATFORM_PAIR }}
+          name: digests-${{ steps.prep.outputs.platform_pair }}
           path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  build_grpc:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm/v6
+          - linux/arm/v7
+          - linux/arm64
+          - linux/386
+          - linux/ppc64le
+          - linux/riscv64
+          - linux/s390x
+    steps:
+      - name: Get commit to build
+        id: ref
+        run: |-
+          if [[ -z "${{ github.event.inputs.tag }}" ]]; then
+            ref="${{ github.ref_name }}"
+          else
+            ref="${{ github.event.inputs.tag }}"
+          fi
+          echo "ref=$ref"
+          echo "ref=$ref" >> $GITHUB_OUTPUT
+          latest=latest-grpc
+          echo "latest=$latest"
+          echo "latest=$latest" >> $GITHUB_OUTPUT
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+      - name: Prepare
+        id: prep
+        run: |
+          platform=${{ matrix.platform }}
+          echo "platform_pair=${platform//\//-}" >> $GITHUB_OUTPUT
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          platforms: ${{ matrix.platform }}
+          context: .
+          build-args: |
+            BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
+            TAGS=with_acme with_grpc
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests-grpc
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests-grpc/${digest#sha256:}"
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ steps.prep.outputs.platform_pair }}-grpc
+          path: /tmp/digests-grpc/*
           if-no-files-found: error
           retention-days: 1
 
@@ -130,3 +207,47 @@ jobs:
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.ref.outputs.latest }}
           docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.ref.outputs.ref }}
+
+  merge_grpc:
+    runs-on: ubuntu-latest
+    needs:
+      - build_grpc
+    steps:
+      - name: Get commit to build
+        id: ref
+        run: |-
+          if [[ -z "${{ github.event.inputs.tag }}" ]]; then
+            ref="${{ github.ref_name }}"
+          else
+            ref="${{ github.event.inputs.tag }}"
+          fi
+          echo "ref=$ref"
+          echo "ref=$ref" >> $GITHUB_OUTPUT
+          latest=latest-grpc
+          echo "latest=$latest"
+          echo "latest=$latest" >> $GITHUB_OUTPUT
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*-grpc
+          merge-multiple: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t "${{ env.REGISTRY_IMAGE }}:${{ steps.ref.outputs.latest }}" \
+            -t "${{ env.REGISTRY_IMAGE }}:${{ steps.ref.outputs.ref }}-grpc" \
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.ref.outputs.latest }}
+          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.ref.outputs.ref }}-grpc
