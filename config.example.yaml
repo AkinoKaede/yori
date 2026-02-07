@@ -87,6 +87,12 @@ subscriptions:
       - filter: [".*(?i)(expired|过期|维护中).*"]
         remove: true
 
+# Optional: direct outbound (no upstream server, relay exits directly)
+# This will be exposed as a virtual subscription named "direct".
+direct:
+  enabled: true
+  tag: "direct"
+
 # Global reload interval (subscriptions will be updated every reload)
 # Set to 0 or omit to disable auto reload
 # Send SIGHUP signal to trigger manual reload
@@ -111,7 +117,8 @@ http:
     # User with full access (empty subscriptions = all subscriptions)
     - username: "admin"
       password: "admin-strong-password"
-      subscriptions: []  # Access to all subscriptions
+      subscriptions: []  # Access to all subscriptions (includes "direct" when enabled)
+    # To grant direct only: subscriptions: ["direct"]
   # Note: local_only nodes are hidden for all HTTP users.
   
   # Optional: Rename nodes in subscription output (applied after process rules)

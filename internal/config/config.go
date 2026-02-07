@@ -18,6 +18,7 @@ type Config struct {
 	CacheFile      string          `yaml:"cache_file"`
 	DataFile       string          `yaml:"data_file"`
 	Subscriptions  []Subscription  `yaml:"subscriptions"`
+	Direct         *DirectConfig   `yaml:"direct"`
 	ReloadInterval Duration        `yaml:"reload_interval"`
 	HTTP           HTTPConfig      `yaml:"http"`
 	Hysteria2      Hysteria2Config `yaml:"hysteria2"`
@@ -61,6 +62,12 @@ type HTTPConfig struct {
 	Rename map[string]string `yaml:"rename"`
 	TLS    *TLSConfig        `yaml:"tls"`
 	Users  []HTTPUser        `yaml:"users"`
+}
+
+// DirectConfig defines a direct outbound entry exposed as a virtual subscription.
+type DirectConfig struct {
+	Enabled bool     `yaml:"enabled"`
+	Tag     string   `yaml:"tag"`
 }
 
 // HTTPUser for Basic Auth and user filtering
@@ -172,8 +179,8 @@ func LoadConfig(path string) (*Config, error) {
 // Validate checks the configuration for errors and applies defaults
 func (c *Config) Validate() error {
 	// Validate subscriptions
-	if len(c.Subscriptions) == 0 {
-		return E.New("at least one subscription is required")
+	if len(c.Subscriptions) == 0 && (c.Direct == nil || !c.Direct.Enabled) {
+		return E.New("at least one subscription is required (or enable direct)")
 	}
 
 	for i, sub := range c.Subscriptions {
@@ -182,6 +189,16 @@ func (c *Config) Validate() error {
 		}
 		if sub.URL == "" {
 			return E.New("subscription[", sub.Name, "]: URL is required")
+		}
+	}
+	if c.Direct != nil && c.Direct.Enabled {
+		if c.Direct.Tag == "" {
+			c.Direct.Tag = "direct"
+		}
+		for _, sub := range c.Subscriptions {
+			if sub.Name == "direct" {
+				return E.New("subscription name 'direct' is reserved for direct outbound")
+			}
 		}
 	}
 
