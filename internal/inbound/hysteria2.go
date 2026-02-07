@@ -238,10 +238,12 @@ func buildTLSOptions(cfg config.Hysteria2Config) (*option.InboundTLSOptions, err
 	if cfg.TLS.ACME != nil {
 		acme := cfg.TLS.ACME
 		tlsOptions.ACME = &option.InboundACMEOptions{
-			Domain:        acme.Domain,
-			Email:         acme.Email,
-			Provider:      acme.Provider,
-			DataDirectory: acme.DataDirectory,
+			Domain:                  acme.Domain,
+			Email:                   acme.Email,
+			Provider:                acme.Provider,
+			DataDirectory:           acme.DataDirectory,
+			DisableHTTPChallenge:    acme.DisableHTTPChallenge,
+			DisableTLSALPNChallenge: acme.DisableTLSALPNChallenge,
 		}
 
 		if acme.DNS01 != nil {
@@ -261,8 +263,20 @@ func buildTLSOptions(cfg config.Hysteria2Config) (*option.InboundTLSOptions, err
 			}
 		}
 	} else {
-		tlsOptions.CertificatePath = cfg.TLS.CertificatePath
-		tlsOptions.KeyPath = cfg.TLS.KeyPath
+		if cfg.TLS.Certificate != "" {
+			tlsOptions.Certificate = []string{cfg.TLS.Certificate}
+		} else {
+			tlsOptions.CertificatePath = cfg.TLS.CertificatePath
+		}
+		if cfg.TLS.Key != "" {
+			tlsOptions.Key = []string{cfg.TLS.Key}
+		} else {
+			tlsOptions.KeyPath = cfg.TLS.KeyPath
+		}
+	}
+
+	if len(cfg.TLS.ALPN) > 0 {
+		tlsOptions.ALPN = cfg.TLS.ALPN
 	}
 
 	return tlsOptions, nil

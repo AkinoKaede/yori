@@ -97,15 +97,20 @@ type TLSConfig struct {
 	ACME            *ACMEConfig `yaml:"acme"`
 	CertificatePath string      `yaml:"certificate_path"`
 	KeyPath         string      `yaml:"key_path"`
+	Certificate     string      `yaml:"certificate"`
+	Key             string      `yaml:"key"`
+	ALPN            []string    `yaml:"alpn"`
 }
 
 // ACMEConfig for automatic certificate management
 type ACMEConfig struct {
-	Domain        []string              `yaml:"domain"`
-	Email         string                `yaml:"email"`
-	Provider      string                `yaml:"provider"`
-	DataDirectory string                `yaml:"data_directory"`
-	DNS01         *DNS01ChallengeConfig `yaml:"dns01_challenge"`
+	Domain                  []string              `yaml:"domain"`
+	Email                   string                `yaml:"email"`
+	Provider                string                `yaml:"provider"`
+	DataDirectory           string                `yaml:"data_directory"`
+	DisableHTTPChallenge    bool                  `yaml:"disable_http_challenge"`
+	DisableTLSALPNChallenge bool                  `yaml:"disable_tls_alpn_challenge"`
+	DNS01                   *DNS01ChallengeConfig `yaml:"dns01_challenge"`
 }
 
 // DNS01ChallengeConfig for DNS-01 ACME challenge
@@ -204,8 +209,13 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate TLS configuration
-	if c.Hysteria2.TLS.ACME == nil && (c.Hysteria2.TLS.CertificatePath == "" || c.Hysteria2.TLS.KeyPath == "") {
-		return E.New("hysteria2.tls: either ACME or manual certificate configuration is required")
+	if c.Hysteria2.TLS.ACME == nil {
+		if c.Hysteria2.TLS.Certificate == "" && c.Hysteria2.TLS.CertificatePath == "" {
+			return E.New("hysteria2.tls: certificate or certificate_path is required when ACME is disabled")
+		}
+		if c.Hysteria2.TLS.Key == "" && c.Hysteria2.TLS.KeyPath == "" {
+			return E.New("hysteria2.tls: key or key_path is required when ACME is disabled")
+		}
 	}
 
 	// Validate ACME config

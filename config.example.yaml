@@ -146,6 +146,9 @@ hysteria2:
       email: "admin@example.com"
       provider: "letsencrypt"  # or "zerossl"
       data_directory: "./data/acme"  # Certificate storage
+      # Disable HTTP-01 or TLS-ALPN-01 challenges when needed
+      # disable_http_challenge: false
+      # disable_tls_alpn_challenge: false
       
       # Optional: DNS-01 challenge (for wildcard certs or when port 80/443 unavailable)
       # dns01_challenge:
@@ -161,6 +164,17 @@ hysteria2:
     # Option 2: Manual certificates
     # certificate_path: "/path/to/cert.pem"
     # key_path: "/path/to/key.pem"
+    # Or embed PEM directly:
+    # certificate: |-
+    #   -----BEGIN CERTIFICATE-----
+    #   ...
+    #   -----END CERTIFICATE-----
+    # key: |-
+    #   -----BEGIN PRIVATE KEY-----
+    #   ...
+    #   -----END PRIVATE KEY-----
+  # Optional: ALPN list for Hysteria2 inbound
+  # alpn: ["h3", "h3-29"]
   
   # Optional: Obfuscation (salamander)
   obfs:
@@ -245,6 +259,9 @@ hysteria2:
       email: "admin@example.com"
       provider: "letsencrypt"
       data_directory: "./acme"
+      # disable_http_challenge: false
+      # disable_tls_alpn_challenge: false
+  # alpn: ["h3", "h3-29"]
   
   obfs:
     type: "salamander"
@@ -280,3 +297,6 @@ hysteria2:
     acme:
       domain: ["your-server.com"]
       email: "you@example.com"
+      # disable_http_challenge: false
+      # disable_tls_alpn_challenge: false
+  # alpn: ["h3", "h3-29"]
