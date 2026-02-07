@@ -5,6 +5,7 @@ package datafile
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	E "github.com/sagernet/sing/common/exceptions"
 	"go.etcd.io/bbolt"
@@ -69,13 +70,7 @@ func (d *DataFile) PreStart() error {
 	if d.path == "" {
 		return nil
 	}
-	dataDir := d.path
-	for i := len(dataDir) - 1; i >= 0; i-- {
-		if dataDir[i] == '/' || dataDir[i] == '\\' {
-			dataDir = dataDir[:i]
-			break
-		}
-	}
+	dataDir := filepath.Dir(d.path)
 	if dataDir != "" && dataDir != "." {
 		if err := os.MkdirAll(dataDir, 0o755); err != nil {
 			return E.Cause(err, "create data directory")

@@ -4,10 +4,14 @@ package cachefile
 
 import (
 	"bytes"
-	"encoding/gob"
+	"context"
+	"encoding/binary"
 	"time"
 
+	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common/json"
+	"github.com/sagernet/sing/common/varbin"
 )
 
 // Subscription represents cached subscription data
@@ -18,39 +22,63 @@ type Subscription struct {
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler
-func (s *Subscription) MarshalBinary() ([]byte, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-
-	// Encode struct fields
-	if err := enc.Encode(s.Content); err != nil {
+func (s *Subscription) MarshalBinary(ctx context.Context) ([]byte, error) {
+	ctx = include.Context(ctx)
+	var buffer bytes.Buffer
+	buffer.WriteByte(1)
+	content, err := json.MarshalContext(ctx, s.Content)
+	if err != nil {
 		return nil, err
 	}
-	if err := enc.Encode(s.LastUpdated); err != nil {
+	_, err = varbin.WriteUvarint(&buffer, uint64(len(content)))
+	if err != nil {
 		return nil, err
 	}
-	if err := enc.Encode(s.LastEtag); err != nil {
+	_, err = buffer.Write(content)
+	if err != nil {
 		return nil, err
 	}
-
-	return buf.Bytes(), nil
+	err = binary.Write(&buffer, binary.BigEndian, s.LastUpdated.Unix())
+	if err != nil {
+		return nil, err
+	}
+	err = varbin.Write(&buffer, binary.BigEndian, s.LastEtag)
+	if err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
 }
 
 // UnmarshalBinary implements encoding.BinaryUnmarshaler
-func (s *Subscription) UnmarshalBinary(data []byte) error {
-	buf := bytes.NewReader(data)
-	dec := gob.NewDecoder(buf)
-
-	// Decode struct fields
-	if err := dec.Decode(&s.Content); err != nil {
+func (s *Subscription) UnmarshalBinary(ctx context.Context, data []byte) error {
+	ctx = include.Context(ctx)
+	reader := bytes.NewReader(data)
+	_, err := reader.ReadByte()
+	if err != nil {
 		return err
 	}
-	if err := dec.Decode(&s.LastUpdated); err != nil {
+	contentLength, err := binary.ReadUvarint(reader)
+	if err != nil {
 		return err
 	}
-	if err := dec.Decode(&s.LastEtag); err != nil {
+	content := make([]byte, contentLength)
+	_, err = reader.Read(content)
+	if err != nil {
 		return err
 	}
-
+	err = json.UnmarshalContext(ctx, content, &s.Content)
+	if err != nil {
+		return err
+	}
+	var lastUpdatedUnix int64
+	err = binary.Read(reader, binary.BigEndian, &lastUpdatedUnix)
+	if err != nil {
+		return err
+	}
+	s.LastUpdated = time.Unix(lastUpdatedUnix, 0)
+	err = varbin.Read(reader, binary.BigEndian, &s.LastEtag)
+	if err != nil {
+		return err
+	}
 	return nil
 }

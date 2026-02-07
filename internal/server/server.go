@@ -113,6 +113,7 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/sub/base64", s.handleBase64)
 	mux.HandleFunc("/sub/singbox", s.handleSingbox)
+	mux.HandleFunc("/sub/sing-box", s.handleSingbox)
 	mux.HandleFunc("/sub", s.handleSub)
 	mux.HandleFunc("/", s.handleIndex)
 
@@ -515,34 +516,28 @@ func (s *Server) buildHysteria2Outbound(user inbound.User) option.Outbound {
 		addr = "127.0.0.1"
 	}
 
-	// Use first port as default
-	defaultPort := uint16(0)
-	if len(s.state.PublicPorts) > 0 {
-		// Parse first port (could be a range like "443:453" or single port "443")
-		expanded := expandPortRanges([]string{s.state.PublicPorts[0]})
-		if len(expanded) > 0 {
-			fmt.Sscanf(expanded[0], "%d", &defaultPort)
-		}
-	}
-
 	displayName := user.Outbound
 	tag := ""
 	if displayName == "" {
 		tag = "hysteria2"
 	} else {
-		tag = fmt.Sprintf("hysteria2-%s", displayName)
+		tag = displayName
 	}
 
 	hysteria2Opts := &option.Hysteria2OutboundOptions{
 		ServerOptions: option.ServerOptions{
-			Server:     addr,
-			ServerPort: defaultPort,
+			Server: addr,
 		},
 		Password: user.Password,
 	}
 
-	// Set server_ports directly (supports port ranges)
-	if len(s.state.PublicPorts) > 0 {
+	// Prefer server_port when there is exactly one non-range port.
+	if len(s.state.PublicPorts) == 1 && !strings.Contains(s.state.PublicPorts[0], ":") {
+		var singlePort uint16
+		if _, err := fmt.Sscanf(s.state.PublicPorts[0], "%d", &singlePort); err == nil {
+			hysteria2Opts.ServerOptions.ServerPort = singlePort
+		}
+	} else if len(s.state.PublicPorts) > 0 {
 		hysteria2Opts.ServerPorts = s.state.PublicPorts
 	}
 

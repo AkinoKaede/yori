@@ -5,6 +5,7 @@ package cachefile
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	E "github.com/sagernet/sing/common/exceptions"
 	"go.etcd.io/bbolt"
@@ -69,13 +70,7 @@ func (c *CacheFile) PreStart() error {
 	if c.path == "" {
 		return nil
 	}
-	cacheDir := c.path
-	for i := len(cacheDir) - 1; i >= 0; i-- {
-		if cacheDir[i] == '/' || cacheDir[i] == '\\' {
-			cacheDir = cacheDir[:i]
-			break
-		}
-	}
+	cacheDir := filepath.Dir(c.path)
 	if cacheDir != "" && cacheDir != "." {
 		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 			return E.Cause(err, "create cache directory")
@@ -102,7 +97,7 @@ func (c *CacheFile) LoadSubscription(ctx context.Context, name string) *Subscrip
 			return os.ErrNotExist
 		}
 
-		return subscription.UnmarshalBinary(data)
+		return subscription.UnmarshalBinary(ctx, data)
 	})
 
 	if err != nil {
@@ -124,7 +119,7 @@ func (c *CacheFile) StoreSubscription(ctx context.Context, name string, subscrip
 			return os.ErrNotExist
 		}
 
-		data, err := subscription.MarshalBinary()
+		data, err := subscription.MarshalBinary(ctx)
 		if err != nil {
 			return err
 		}

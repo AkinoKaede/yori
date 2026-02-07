@@ -4,7 +4,7 @@ log_level: "info"
 # Cache file for subscription data (improves startup time)
 cache_file: "cache.db"
 
-# Data file for storing generated user passwords (separate from cache)
+# Data file for storing generated user passwords
 # This file persists Hysteria2 user credentials across restarts
 data_file: "data.db"
 
@@ -50,8 +50,15 @@ subscriptions:
       # Step 6: Use invert to exclude instead of include
       - filter: [".*CN.*", ".*China.*", ".*中国.*"]
         invert: true  # Keep everything EXCEPT China nodes
+
+      # Step 7: Mark non-relayed nodes and customize names
+      # local_only nodes are never shown in HTTP subscriptions (for all users)
+      - filter: [".*(?i)(internal|local|onlyme).*"]
+        local_only: true
+        rename:
+          "^(.*)$": "Local-$1"  # Custom name for local-only nodes
       
-      # Step 7: Enable uTLS for anti-detection
+      # Step 8: Enable uTLS for anti-detection
       - filter_type: ["trojan", "vmess"]
         rewrite_utls:
           enabled: true
@@ -105,6 +112,7 @@ http:
     - username: "admin"
       password: "admin-strong-password"
       subscriptions: []  # Access to all subscriptions
+  # Note: local_only nodes are hidden for all HTTP users.
   
   # Optional: Rename nodes in subscription output (applied after process rules)
   rename:
