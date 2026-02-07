@@ -16,10 +16,11 @@ import (
 
 	"github.com/AkinoKaede/yori/internal/inbound"
 
+	"github.com/sagernet/sing-box/common/tls"
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json"
-	"github.com/sagernet/sing/common/logger"
 )
 
 // ServerConfig holds the server configuration
@@ -28,6 +29,7 @@ type ServerConfig struct {
 	Rename          map[string]string
 	CertificatePath string
 	KeyPath         string
+	TLSOptions      *option.InboundTLSOptions
 	Users           []HTTPUser
 }
 
@@ -59,7 +61,7 @@ type renamePattern struct {
 type Server struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
-	logger         logger.Logger
+	logger         log.ContextLogger
 	config         *ServerConfig
 	server         *http.Server
 	state          *State
@@ -71,7 +73,7 @@ type Server struct {
 }
 
 // NewServer creates a new subscription server instance
-func NewServer(ctx context.Context, logger logger.Logger, cfg *ServerConfig) *Server {
+func NewServer(ctx context.Context, logger log.ContextLogger, cfg *ServerConfig) *Server {
 	serverCtx, cancel := context.WithCancel(ctx)
 
 	// Compile rename patterns
@@ -129,7 +131,12 @@ func (s *Server) Start() error {
 	}
 
 	// Check if TLS is configured
-	useTLS := s.config.CertificatePath != "" && s.config.KeyPath != ""
+	useTLS := s.config.TLSOptions != nil && s.config.TLSOptions.Enabled
+	if !useTLS {
+		// Fallback to legacy certificate path config
+		useTLS = s.config.CertificatePath != "" && s.config.KeyPath != ""
+	}
+
 	if useTLS {
 		s.logger.Info("HTTPS server listening on ", s.config.Listen)
 	} else {
@@ -140,7 +147,38 @@ func (s *Server) Start() error {
 	go func() {
 		var err error
 		if useTLS {
-			err = s.server.ServeTLS(listener, s.config.CertificatePath, s.config.KeyPath)
+			if s.config.TLSOptions != nil {
+				// Use sing-box TLS implementation (supports ACME)
+				tlsServerConfig, err := tls.NewServer(s.ctx, s.logger, *s.config.TLSOptions)
+				if err != nil {
+					s.logger.Error("failed to create TLS config: ", err)
+					return
+				}
+				// Start ACME if configured
+				if err := tlsServerConfig.Start(); err != nil {
+					s.logger.Error("failed to start TLS: ", err)
+					return
+				}
+				defer func() {
+					if closeErr := tlsServerConfig.Close(); closeErr != nil {
+						s.logger.Error("failed to close TLS config: ", closeErr)
+					}
+				}()
+
+				// Convert to standard TLS config
+				stdTLSConfig, err := tlsServerConfig.STDConfig()
+				if err != nil {
+					s.logger.Error("failed to get standard TLS config: ", err)
+					return
+				}
+				s.server.TLSConfig = stdTLSConfig
+				if err := s.server.ServeTLS(listener, "", ""); err != nil && err != http.ErrServerClosed {
+					s.logger.Error("server error: ", err)
+				}
+			} else {
+				// Legacy certificate path
+				err = s.server.ServeTLS(listener, s.config.CertificatePath, s.config.KeyPath)
+			}
 		} else {
 			err = s.server.Serve(listener)
 		}

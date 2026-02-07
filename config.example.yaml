@@ -129,8 +129,24 @@ http:
     "(?i)singapore": "SG"
     "^(.*?)\\s+-\\s+.*$": "$1" # Remove suffix after " - "
 
-  # Optional: HTTPS for HTTP subscription server
-  # tls:
+  # Optional: HTTPS for HTTP subscription server  # Option 1: ACME automatic certificates (recommended)
+  tls:
+    acme:
+      domain: ["api.example.com"]
+      email: "admin@example.com"
+      provider: "letsencrypt" # or "zerossl"
+      data_directory: "./data/acme"
+      # Use different port than Hysteria2 (which uses UDP)
+      # disable_http_challenge: false
+      # disable_tls_alpn_challenge: false
+      
+      # Optional: DNS-01 challenge for wildcard certs
+      # dns01_challenge:
+      #   provider: "cloudflare"
+      #   api_token: "${CLOUDFLARE_API_TOKEN}"
+      #   zone_token: "${CLOUDFLARE_ZONE_TOKEN}"
+  
+  # Option 2: Manual certificates  # tls:
   #   certificate_path: "/path/to/http-cert.pem"
   #   key_path: "/path/to/http-key.pem"
 
@@ -256,9 +272,21 @@ http:
     "Hong Kong": "HK"
 
   # HTTPS for subscription server
+  # Option 1: ACME (recommended, same as Hysteria2)
   tls:
-    certificate_path: "/etc/ssl/certs/http.pem"
-    key_path: "/etc/ssl/private/http.key"
+    acme:
+      domain: ["api.example.com"]
+      email: "admin@example.com"
+      provider: "letsencrypt"
+      data_directory: "./acme-http"
+      # Use different data_directory than Hysteria2 if using different domains
+      # disable_http_challenge: false
+      # disable_tls_alpn_challenge: false
+      
+  # Option 2: Manual certificates
+  # tls:
+  #   certificate_path: "/etc/ssl/certs/http.pem"
+  #   key_path: "/etc/ssl/private/http.key"
 
 hysteria2:
   listen: "::"

@@ -341,6 +341,12 @@ func buildServerConfig(cfg *config.Config) *server.ServerConfig {
 		Rename: cfg.HTTP.Rename,
 	}
 	if cfg.HTTP.TLS != nil {
+		// Build TLS options (supports ACME)
+		tlsOptions, err := buildHTTPTLSOptions(*cfg.HTTP.TLS)
+		if err == nil && tlsOptions != nil {
+			serverCfg.TLSOptions = tlsOptions
+		}
+		// Keep legacy certificate path for backward compatibility
 		serverCfg.CertificatePath = cfg.HTTP.TLS.CertificatePath
 		serverCfg.KeyPath = cfg.HTTP.TLS.KeyPath
 	}
@@ -441,4 +447,57 @@ func hashValue(value any) string {
 	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func buildHTTPTLSOptions(tlsCfg config.TLSConfig) (*option.InboundTLSOptions, error) {
+	tlsOptions := &option.InboundTLSOptions{Enabled: true}
+
+	if tlsCfg.ACME != nil {
+		acme := tlsCfg.ACME
+		tlsOptions.ACME = &option.InboundACMEOptions{
+			Domain:                  acme.Domain,
+			Email:                   acme.Email,
+			Provider:                acme.Provider,
+			DataDirectory:           acme.DataDirectory,
+			DisableHTTPChallenge:    acme.DisableHTTPChallenge,
+			DisableTLSALPNChallenge: acme.DisableTLSALPNChallenge,
+		}
+
+		if acme.DNS01 != nil {
+			tlsOptions.ACME.DNS01Challenge = &option.ACMEDNS01ChallengeOptions{
+				Provider: acme.DNS01.Provider,
+			}
+			switch acme.DNS01.Provider {
+			case "cloudflare":
+				tlsOptions.ACME.DNS01Challenge.CloudflareOptions = option.ACMEDNS01CloudflareOptions{
+					APIToken:  acme.DNS01.APIToken,
+					ZoneToken: acme.DNS01.ZoneToken,
+				}
+			case "alidns":
+				tlsOptions.ACME.DNS01Challenge.AliDNSOptions = option.ACMEDNS01AliDNSOptions{
+					AccessKeyID:     acme.DNS01.AccessKey,
+					AccessKeySecret: acme.DNS01.SecretKey,
+				}
+			}
+		}
+	} else {
+		if tlsCfg.Certificate != "" {
+			tlsOptions.Certificate = []string{tlsCfg.Certificate}
+		} else if tlsCfg.CertificatePath != "" {
+			tlsOptions.CertificatePath = tlsCfg.CertificatePath
+		} else {
+			return nil, nil
+		}
+		if tlsCfg.Key != "" {
+			tlsOptions.Key = []string{tlsCfg.Key}
+		} else if tlsCfg.KeyPath != "" {
+			tlsOptions.KeyPath = tlsCfg.KeyPath
+		}
+	}
+
+	if len(tlsCfg.ALPN) > 0 {
+		tlsOptions.ALPN = tlsCfg.ALPN
+	}
+
+	return tlsOptions, nil
 }
