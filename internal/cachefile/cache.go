@@ -4,8 +4,10 @@ package cachefile
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
 	E "github.com/sagernet/sing/common/exceptions"
 	"go.etcd.io/bbolt"
@@ -33,13 +35,27 @@ func (c *CacheFile) Start() error {
 	const fileMode = 0o666
 
 	options := bbolt.Options{
-		Timeout:    0,
+		Timeout:    time.Second,
 		NoGrowSync: false,
 	}
 
-	db, err := bbolt.Open(c.path, fileMode, &options)
-	if err != nil {
+	var (
+		db  *bbolt.DB
+		err error
+	)
+	for i := 0; i < 10; i++ {
+		db, err = bbolt.Open(c.path, fileMode, &options)
+		if err == nil {
+			break
+		}
+		if errors.Is(err, bbolt.ErrTimeout) {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
 		return E.Cause(err, "open cache database")
+	}
+	if err != nil {
+		return E.Cause(err, "open cache database (locked by another process?)")
 	}
 
 	err = db.Update(func(tx *bbolt.Tx) error {
