@@ -87,7 +87,7 @@ type Hysteria2Config struct {
 // Port ranges are automatically converted to hyphen format (443-453) in hysteria2:// links
 type PublicConfig struct {
 	Server string   `yaml:"server"`
-	Port   uint16   `yaml:"port,omitempty"`   // Single port
+	Port   uint16   `yaml:"port,omitempty"`  // Single port
 	Ports  []string `yaml:"ports,omitempty"` // Multiple ports or ranges (e.g., ["443", "1000:1100"])
 }
 
@@ -252,16 +252,16 @@ func (c *Config) Validate() error {
 // Result format is string to support port ranges like "443:453"
 func (p *PublicConfig) GetPorts() []string {
 	var result []string
-	
+
 	// Add single port if specified
 	if p.Port != 0 {
 		result = append(result, fmt.Sprintf("%d", p.Port))
 	}
-	
+
 	// Add ports list if specified
 	if len(p.Ports) > 0 {
 		result = append(result, p.Ports...)
 	}
-	
+
 	return result
 }

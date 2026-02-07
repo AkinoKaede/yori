@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/AkinoKaede/proxy-relay/config"
-	"github.com/AkinoKaede/proxy-relay/internal"
+	"github.com/AkinoKaede/proxy-relay/internal/config"
+	"github.com/AkinoKaede/proxy-relay/internal/utils"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -106,7 +106,7 @@ func (p *ProcessOptions) Process(outbounds []option.Outbound) ([]option.Outbound
 
 		// Remove emoji if requested
 		if p.RemoveEmoji {
-			outbound.Tag = internal.RemoveEmoji(outbound.Tag)
+			outbound.Tag = utils.RemoveEmoji(outbound.Tag)
 		}
 
 		// Trim whitespace

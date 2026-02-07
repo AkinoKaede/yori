@@ -3,7 +3,7 @@
 package generator
 
 import (
-	"github.com/AkinoKaede/proxy-relay/config"
+	"github.com/AkinoKaede/proxy-relay/internal/config"
 	"github.com/sagernet/sing-box/option"
 )
 

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AkinoKaede/proxy-relay/internal"
+	"github.com/AkinoKaede/proxy-relay/internal/utils"
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -60,7 +60,7 @@ func (m *BoxManager) Start(opts *option.Options) error {
 
 	m.box = instance
 	// Store config hash for change detection
-	m.configHash = internal.HashConfig(opts)
+	m.configHash = utils.HashConfig(opts)
 	return nil
 }
 

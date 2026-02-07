@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AkinoKaede/proxy-relay/cachefile"
-	"github.com/AkinoKaede/proxy-relay/config"
-	"github.com/AkinoKaede/proxy-relay/subscription/parser"
+	"github.com/AkinoKaede/proxy-relay/internal/cachefile"
+	"github.com/AkinoKaede/proxy-relay/internal/config"
+	"github.com/AkinoKaede/proxy-relay/internal/subscription/parser"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"

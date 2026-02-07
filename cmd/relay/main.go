@@ -11,12 +11,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/AkinoKaede/proxy-relay/config"
-	"github.com/AkinoKaede/proxy-relay/datafile"
-	"github.com/AkinoKaede/proxy-relay/generator"
-	"github.com/AkinoKaede/proxy-relay/internal"
-	"github.com/AkinoKaede/proxy-relay/server"
-	"github.com/AkinoKaede/proxy-relay/subscription"
+	"github.com/AkinoKaede/proxy-relay/internal/config"
+	"github.com/AkinoKaede/proxy-relay/internal/datafile"
+	"github.com/AkinoKaede/proxy-relay/internal/generator"
+	"github.com/AkinoKaede/proxy-relay/internal/server"
+	"github.com/AkinoKaede/proxy-relay/internal/subscription"
+	"github.com/AkinoKaede/proxy-relay/internal/utils"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -286,7 +286,7 @@ func reload(
 	}
 
 	// Check if configuration actually changed
-	newHash := internal.HashConfig(boxConfig)
+	newHash := utils.HashConfig(boxConfig)
 	if boxManager.ConfigHash() == newHash {
 		log.Info("Configuration unchanged, skipping sing-box restart")
 		// Still update HTTP server state in case user list changed

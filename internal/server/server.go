@@ -38,7 +38,7 @@ type HTTPUser struct {
 // State holds the server state information
 type State struct {
 	Users                    []option.Hysteria2User
-	LocalOnlyTags            map[string]bool  // Tags of local-only outbounds (not available to users)
+	LocalOnlyTags            map[string]bool     // Tags of local-only outbounds (not available to users)
 	HTTPUserToHysteria2Users map[string][]string // HTTP username -> Hysteria2 usernames mapping
 	PublicAddr               string
 	PublicPorts              []string // Port list, supports ranges like "443:453"
@@ -582,7 +582,7 @@ func convertPortsForLink(portSpecs []string) string {
 // Output: ["443", "1000", "1001", "1002", "8443"]
 func expandPortRanges(portSpecs []string) []string {
 	var result []string
-	
+
 	for _, spec := range portSpecs {
 		// Check if it's a range (contains ":")
 		if strings.Contains(spec, ":") {
@@ -603,6 +603,6 @@ func expandPortRanges(portSpecs []string) []string {
 		// Not a range or invalid range, add as-is
 		result = append(result, spec)
 	}
-	
+
 	return result
 }
