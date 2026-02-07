@@ -160,7 +160,7 @@ func run(log log.ContextLogger, cfg *config.Config) error {
 		LocalOnlyTags:            subManager.GetLocalOnlyTags(),
 		HTTPUserToHysteria2Users: httpUserMapping,
 		PublicAddr:               cfg.Hysteria2.Public.Server,
-		PublicPorts:              cfg.Hysteria2.Public.Ports,
+		PublicPorts:              cfg.Hysteria2.Public.GetPorts(),
 		SNI:                      sni,
 		Obfs:                     obfsType,
 	}
@@ -330,7 +330,7 @@ func reload(
 		LocalOnlyTags:            subManager.GetLocalOnlyTags(),
 		HTTPUserToHysteria2Users: httpUserMapping,
 		PublicAddr:               newCfg.Hysteria2.Public.Server,
-		PublicPorts:              newCfg.Hysteria2.Public.Ports,
+		PublicPorts:              newCfg.Hysteria2.Public.GetPorts(),
 		SNI:                      sni,
 		Obfs:                     obfsType,
 	}

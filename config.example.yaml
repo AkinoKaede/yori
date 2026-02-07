@@ -120,14 +120,20 @@ http:
 # Hysteria2 inbound configuration
 hysteria2:
   listen: "::"
-  ports: [443, 8443, 10443]  # Multiple ports for load balancing
+  port: 443  # Single listen port
   up_mbps: 200
   down_mbps: 200
   
   # Public server information (used in share links)
   public:
-    server: "relay.example.com"  # Your public domain or IP
-    ports: [443]  # Only expose port 443 in subscriptions (subset of listen ports)
+    # Server address for share links (optional if using ACME - will use first domain)
+    server: "relay.example.com"  # Your public domain or IP (can omit if using ACME)
+    # Use either 'port' for single port or 'ports' for multiple/ranges
+    # If both specified, they will be merged
+    # Port ranges use colon format (from:to) for sing-box compatibility
+    # Example: ["443", "8443", "10000:10010"]
+    # In hysteria2:// links, ranges are automatically converted to hyphen format (from-to)
+    ports: ["443", "8443", "10000:10010"]  # Supports single ports and ranges
   
   # TLS configuration - choose ACME or manual
   tls:
@@ -222,13 +228,13 @@ http:
 
 hysteria2:
   listen: "::"
-  ports: [443, 8443]
+  port: 443
   up_mbps: 500
   down_mbps: 500
   
   public:
     server: "relay.example.com"
-    ports: [443]
+    ports: ["443", "8443"]  # Multiple ports
   
   tls:
     acme:
@@ -259,13 +265,13 @@ http:
 
 hysteria2:
   listen: "::"
-  ports: [443]
+  port: 443
   up_mbps: 100
   down_mbps: 100
   
   public:
     server: "your-server.com"
-    ports: [443]
+    port: 443  # Single port (will be used if ports not specified)
   
   tls:
     acme:

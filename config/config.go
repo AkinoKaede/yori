@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -81,9 +82,13 @@ type Hysteria2Config struct {
 }
 
 // PublicConfig for public-facing server information
+// Supports both Port and Ports. If both are set, they will be merged.
+// Ports supports port ranges like "443:453" (colon format for sing-box)
+// Port ranges are automatically converted to hyphen format (443-453) in hysteria2:// links
 type PublicConfig struct {
 	Server string   `yaml:"server"`
-	Ports  []uint16 `yaml:"ports"`
+	Port   uint16   `yaml:"port,omitempty"`   // Single port
+	Ports  []string `yaml:"ports,omitempty"` // Multiple ports or ranges (e.g., ["443", "1000:1100"])
 }
 
 // TLSConfig supports both ACME and manual certificates
@@ -223,13 +228,40 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate public config
+	// public.server is optional - if not set, will use SNI from ACME domain
 	if c.Hysteria2.Public.Server == "" {
-		return E.New("hysteria2.public.server is required for generating share links")
+		// Use first ACME domain as server if available
+		if c.Hysteria2.TLS.ACME != nil && len(c.Hysteria2.TLS.ACME.Domain) > 0 {
+			c.Hysteria2.Public.Server = c.Hysteria2.TLS.ACME.Domain[0]
+		} else {
+			return E.New("hysteria2.public.server is required (or use ACME with domain)")
+		}
 	}
-	// Default to listen port if no public ports specified
-	if len(c.Hysteria2.Public.Ports) == 0 {
-		c.Hysteria2.Public.Ports = []uint16{c.Hysteria2.Port}
+	// Merge port and ports, default to listen port if neither specified
+	ports := c.Hysteria2.Public.GetPorts()
+	if len(ports) == 0 {
+		// Default to listen port
+		c.Hysteria2.Public.Ports = []string{fmt.Sprintf("%d", c.Hysteria2.Port)}
 	}
 
 	return nil
+}
+
+// GetPorts returns the merged list of ports from Port and Ports
+// If both are set, Port is prepended to Ports
+// Result format is string to support port ranges like "443:453"
+func (p *PublicConfig) GetPorts() []string {
+	var result []string
+	
+	// Add single port if specified
+	if p.Port != 0 {
+		result = append(result, fmt.Sprintf("%d", p.Port))
+	}
+	
+	// Add ports list if specified
+	if len(p.Ports) > 0 {
+		result = append(result, p.Ports...)
+	}
+	
+	return result
 }

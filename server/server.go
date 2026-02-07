@@ -38,10 +38,10 @@ type HTTPUser struct {
 // State holds the server state information
 type State struct {
 	Users                    []option.Hysteria2User
-	LocalOnlyTags            map[string]bool     // Tags of local-only outbounds (not available to users)
+	LocalOnlyTags            map[string]bool  // Tags of local-only outbounds (not available to users)
 	HTTPUserToHysteria2Users map[string][]string // HTTP username -> Hysteria2 usernames mapping
 	PublicAddr               string
-	PublicPorts              []uint16
+	PublicPorts              []string // Port list, supports ranges like "443:453"
 	SNI                      string
 	Obfs                     string
 }
@@ -315,10 +315,10 @@ func (s *Server) handleBase64(w http.ResponseWriter, r *http.Request) {
 
 	var links []string
 	for _, user := range filteredUsers {
-		for _, port := range s.state.PublicPorts {
-			link := s.buildHysteria2Link(user, port)
-			links = append(links, link)
-		}
+		// Convert port ranges from colon format (sing-box) to hyphen format (hysteria2 link)
+		portList := convertPortsForLink(s.state.PublicPorts)
+		link := s.buildHysteria2Link(user, portList)
+		links = append(links, link)
 	}
 
 	content := strings.Join(links, "\n")
@@ -461,14 +461,19 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildHysteria2Link creates a hysteria2:// URL format
-func (s *Server) buildHysteria2Link(user option.Hysteria2User, port uint16) string {
+// portList is a comma-separated list of ports and ranges (e.g., "443,1000-1100,8443")
+func (s *Server) buildHysteria2Link(user option.Hysteria2User, portList string) string {
+	// Use PublicAddr, fallback to SNI if not set
 	addr := s.state.PublicAddr
+	if addr == "" {
+		addr = s.state.SNI
+	}
 	if addr == "" {
 		addr = "127.0.0.1"
 	}
 
-	// hysteria2://password@host:port/?sni=example.com&obfs=salamander&obfs-password=secret#name
-	link := fmt.Sprintf("hysteria2://%s@%s:%d/", user.Password, addr, port)
+	// hysteria2://password@host:port1,port2,range1-range2/?sni=example.com&obfs=salamander&obfs-password=secret#name
+	link := fmt.Sprintf("hysteria2://%s@%s:%s/", user.Password, addr, portList)
 
 	var params []string
 	if s.state.SNI != "" {
@@ -499,15 +504,23 @@ func (s *Server) buildHysteria2Link(user option.Hysteria2User, port uint16) stri
 
 // buildHysteria2Outbound creates a sing-box Hysteria2 outbound config
 func (s *Server) buildHysteria2Outbound(user option.Hysteria2User) option.Outbound {
+	// Use PublicAddr, fallback to SNI if not set
 	addr := s.state.PublicAddr
+	if addr == "" {
+		addr = s.state.SNI
+	}
 	if addr == "" {
 		addr = "127.0.0.1"
 	}
 
-	// Use first port as default, or 0 if no ports configured
+	// Use first port as default
 	defaultPort := uint16(0)
 	if len(s.state.PublicPorts) > 0 {
-		defaultPort = s.state.PublicPorts[0]
+		// Parse first port (could be a range like "443:453" or single port "443")
+		expanded := expandPortRanges([]string{s.state.PublicPorts[0]})
+		if len(expanded) > 0 {
+			fmt.Sscanf(expanded[0], "%d", &defaultPort)
+		}
 	}
 
 	tag := fmt.Sprintf("hysteria2-%s", user.Name)
@@ -523,13 +536,9 @@ func (s *Server) buildHysteria2Outbound(user option.Hysteria2User) option.Outbou
 		Password: user.Password,
 	}
 
-	// Set server_ports for multi-port hopping
+	// Set server_ports directly (supports port ranges)
 	if len(s.state.PublicPorts) > 0 {
-		serverPorts := make([]string, len(s.state.PublicPorts))
-		for i, port := range s.state.PublicPorts {
-			serverPorts[i] = fmt.Sprintf("%d", port)
-		}
-		hysteria2Opts.ServerPorts = serverPorts
+		hysteria2Opts.ServerPorts = s.state.PublicPorts
 	}
 
 	if s.state.SNI != "" {
@@ -554,4 +563,46 @@ func (s *Server) buildHysteria2Outbound(user option.Hysteria2User) option.Outbou
 	}
 
 	return outbound
+}
+
+// convertPortsForLink converts port list from sing-box format (colon ranges) to hysteria2 link format (hyphen ranges)
+// Input: ["443", "1000:1100", "8443"]
+// Output: "443,1000-1100,8443"
+func convertPortsForLink(portSpecs []string) string {
+	converted := make([]string, len(portSpecs))
+	for i, spec := range portSpecs {
+		// Replace colon with hyphen for ranges
+		converted[i] = strings.ReplaceAll(spec, ":", "-")
+	}
+	return strings.Join(converted, ",")
+}
+
+// expandPortRanges expands port ranges like "443:453" to individual port strings
+// Input: ["443", "1000:1002", "8443"]
+// Output: ["443", "1000", "1001", "1002", "8443"]
+func expandPortRanges(portSpecs []string) []string {
+	var result []string
+	
+	for _, spec := range portSpecs {
+		// Check if it's a range (contains ":")
+		if strings.Contains(spec, ":") {
+			parts := strings.Split(spec, ":")
+			if len(parts) == 2 {
+				var start, end int
+				if _, err := fmt.Sscanf(parts[0], "%d", &start); err == nil {
+					if _, err := fmt.Sscanf(parts[1], "%d", &end); err == nil {
+						// Expand range
+						for port := start; port <= end; port++ {
+							result = append(result, fmt.Sprintf("%d", port))
+						}
+						continue
+					}
+				}
+			}
+		}
+		// Not a range or invalid range, add as-is
+		result = append(result, spec)
+	}
+	
+	return result
 }
