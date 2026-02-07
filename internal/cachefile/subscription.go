@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"io"
 	"time"
 
 	"github.com/sagernet/sing-box/include"
@@ -42,8 +43,11 @@ func (s *Subscription) MarshalBinary(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = varbin.Write(&buffer, binary.BigEndian, s.LastEtag)
-	if err != nil {
+	lastEtagBytes := []byte(s.LastEtag)
+	if err := binary.Write(&buffer, binary.BigEndian, uint64(len(lastEtagBytes))); err != nil {
+		return nil, err
+	}
+	if _, err := buffer.Write(lastEtagBytes); err != nil {
 		return nil, err
 	}
 	return buffer.Bytes(), nil
@@ -76,9 +80,18 @@ func (s *Subscription) UnmarshalBinary(ctx context.Context, data []byte) error {
 		return err
 	}
 	s.LastUpdated = time.Unix(lastUpdatedUnix, 0)
-	err = varbin.Read(reader, binary.BigEndian, &s.LastEtag)
-	if err != nil {
+	var lastEtagLength uint64
+	if err := binary.Read(reader, binary.BigEndian, &lastEtagLength); err != nil {
 		return err
+	}
+	if lastEtagLength > 0 {
+		lastEtagBytes := make([]byte, lastEtagLength)
+		if _, err := io.ReadFull(reader, lastEtagBytes); err != nil {
+			return err
+		}
+		s.LastEtag = string(lastEtagBytes)
+	} else {
+		s.LastEtag = ""
 	}
 	return nil
 }

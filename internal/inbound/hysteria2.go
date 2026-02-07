@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AkinoKaede/proxy-relay/internal/config"
+
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/listener"
 	"github.com/sagernet/sing-box/common/tls"
@@ -178,7 +179,9 @@ func (h *Hysteria2Inbound) NewConnectionEx(ctx context.Context, conn net.Conn, s
 	user, ok := h.lookupUser(ctx)
 	if !ok {
 		h.logger.WarnContext(ctx, "unknown user for inbound connection")
-		N.CloseOnHandshakeFailure(conn, onClose, E.New("unknown user"))
+		if closeErr := N.CloseOnHandshakeFailure(conn, onClose, E.New("unknown user")); closeErr != nil {
+			h.logger.WarnContext(ctx, "close failed: ", closeErr)
+		}
 		return
 	}
 	metadata.User = user.Name
@@ -194,7 +197,9 @@ func (h *Hysteria2Inbound) NewPacketConnectionEx(ctx context.Context, conn N.Pac
 	user, ok := h.lookupUser(ctx)
 	if !ok {
 		h.logger.WarnContext(ctx, "unknown user for inbound packet connection")
-		N.CloseOnHandshakeFailure(conn, onClose, E.New("unknown user"))
+		if closeErr := N.CloseOnHandshakeFailure(conn, onClose, E.New("unknown user")); closeErr != nil {
+			h.logger.WarnContext(ctx, "close failed: ", closeErr)
+		}
 		return
 	}
 	metadata.User = user.Name

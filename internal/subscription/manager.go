@@ -17,6 +17,7 @@ import (
 	"github.com/AkinoKaede/proxy-relay/internal/config"
 	"github.com/AkinoKaede/proxy-relay/internal/subscription/parser"
 	"github.com/AkinoKaede/proxy-relay/pkg/constant"
+
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -210,7 +211,11 @@ func (m *Manager) fetchFromHTTP(sub *Subscription) error {
 	if err != nil {
 		return E.Cause(err, "http request")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			m.logger.Warn("close response body: ", err)
+		}
+	}()
 
 	// Handle 304 Not Modified
 	if resp.StatusCode == http.StatusNotModified {

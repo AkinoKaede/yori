@@ -13,10 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AkinoKaede/proxy-relay/cachefile"
-	"github.com/AkinoKaede/proxy-relay/config"
+	"github.com/AkinoKaede/proxy-relay/internal/cachefile"
+	"github.com/AkinoKaede/proxy-relay/internal/config"
+	"github.com/AkinoKaede/proxy-relay/internal/subscription/parser"
 	"github.com/AkinoKaede/proxy-relay/pkg/constant"
-	"github.com/AkinoKaede/proxy-relay/subscription/parser"
+
+	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
@@ -48,6 +50,7 @@ type Subscription struct {
 
 // NewManager creates a new subscription manager
 func NewManager(ctx context.Context, logger logger.Logger, cfg *config.Config) (*Manager, error) {
+	ctx = include.Context(ctx)
 	subscriptions := make([]*Subscription, 0, len(cfg.Subscriptions))
 
 	for i, subCfg := range cfg.Subscriptions {
@@ -208,7 +211,11 @@ func (m *Manager) fetchFromHTTP(sub *Subscription) error {
 	if err != nil {
 		return E.Cause(err, "http request")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			m.logger.Warn("close response body: ", err)
+		}
+	}()
 
 	// Handle 304 Not Modified
 	if resp.StatusCode == http.StatusNotModified {

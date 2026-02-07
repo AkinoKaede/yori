@@ -18,6 +18,7 @@ import (
 	"github.com/AkinoKaede/proxy-relay/internal/outbound"
 	"github.com/AkinoKaede/proxy-relay/internal/server"
 	"github.com/AkinoKaede/proxy-relay/internal/subscription"
+
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
@@ -192,7 +193,9 @@ func (e *Engine) DispatchConnection(ctx context.Context, conn net.Conn, metadata
 	outboundHandler, wrappedOnClose, ok := e.outbound.Acquire(user.Outbound, onClose)
 	if !ok {
 		err := E.New("outbound not found: ", user.Outbound)
-		N.CloseOnHandshakeFailure(conn, onClose, err)
+		if closeErr := N.CloseOnHandshakeFailure(conn, onClose, err); closeErr != nil {
+			e.logger.WarnContext(ctx, "close failed: ", closeErr)
+		}
 		e.logger.WarnContext(ctx, err)
 		return
 	}
@@ -207,7 +210,9 @@ func (e *Engine) DispatchPacketConnection(ctx context.Context, conn N.PacketConn
 	outboundHandler, wrappedOnClose, ok := e.outbound.Acquire(user.Outbound, onClose)
 	if !ok {
 		err := E.New("outbound not found: ", user.Outbound)
-		N.CloseOnHandshakeFailure(conn, onClose, err)
+		if closeErr := N.CloseOnHandshakeFailure(conn, onClose, err); closeErr != nil {
+			e.logger.WarnContext(ctx, "close failed: ", closeErr)
+		}
 		e.logger.WarnContext(ctx, err)
 		return
 	}

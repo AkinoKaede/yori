@@ -177,8 +177,8 @@ func parseVmessURL(linkURL *url.URL) (option.Outbound, error) {
 
 func buildVmessOutbound(vmessOpts V2rayNVmessOptions) option.Outbound {
 	var options option.VMessOutboundOptions
-	options.ServerOptions.Server = vmessOpts.Add
-	options.ServerOptions.ServerPort = uint16(vmessOpts.Port)
+	options.Server = vmessOpts.Add
+	options.ServerPort = uint16(vmessOpts.Port)
 	options.UUID = vmessOpts.ID
 	options.AlterId = int(vmessOpts.Aid)
 
@@ -192,11 +192,11 @@ func buildVmessOutbound(vmessOpts V2rayNVmessOptions) option.Outbound {
 	// Handle TLS
 	tlsEnabled := vmessOpts.TLS == "tls" || vmessOpts.TLS == "true"
 	if tlsEnabled {
-		options.OutboundTLSOptionsContainer.TLS = &option.OutboundTLSOptions{
+		options.TLS = &option.OutboundTLSOptions{
 			Enabled: true,
 		}
 		if vmessOpts.SNI != "" {
-			options.OutboundTLSOptionsContainer.TLS.ServerName = vmessOpts.SNI
+			options.TLS.ServerName = vmessOpts.SNI
 		}
 	}
 

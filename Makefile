@@ -1,4 +1,4 @@
-.PHONY: build build-grpc run run-grpc test tidy fmt clean
+.PHONY: build build-grpc run run-grpc test tidy fmt fmt_install lint lint_install clean
 
 NAME = proxy-relay
 COMMIT = $(shell git rev-parse --short HEAD)
@@ -32,7 +32,23 @@ tidy:
 	$(GO) mod tidy
 
 fmt:
-	$(GO) fmt ./...
+	@gofumpt -l -w .
+	@gofmt -s -w .
+	@gci write --custom-order -s standard -s "prefix(github.com/AkinoKaede/)" -s "default" .
+
+fmt_install:
+	go install -v mvdan.cc/gofumpt@latest
+	go install -v github.com/daixiang0/gci@latest
+
+lint:
+	GOOS=linux golangci-lint run ./...
+	GOOS=android golangci-lint run ./...
+	GOOS=windows golangci-lint run ./...
+	GOOS=darwin golangci-lint run ./...
+	GOOS=freebsd golangci-lint run ./...
+
+lint_install:
+	go install -v github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 clean:
 	rm -rf $(BIN_DIR)

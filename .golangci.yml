@@ -1,0 +1,16 @@
+version: "2"
+
+linters:
+  enable: []
+
+formatters:
+  enable:
+    - gofumpt
+    - gci
+  settings:
+    gci:
+      custom-order: true
+      sections:
+        - standard
+        - prefix(github.com/AkinoKaede/)
+        - default

@@ -17,6 +17,7 @@ import (
 	"github.com/AkinoKaede/proxy-relay/internal/datafile"
 	"github.com/AkinoKaede/proxy-relay/internal/engine"
 	"github.com/AkinoKaede/proxy-relay/pkg/constant"
+
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -113,7 +114,11 @@ func run(log log.ContextLogger, cfg *config.Config) error {
 		if err := dataFile.Start(); err != nil {
 			return E.Cause(err, "start data file")
 		}
-		defer dataFile.Close()
+		defer func() {
+			if err := dataFile.Close(); err != nil {
+				log.Error("close data file: ", err)
+			}
+		}()
 		log.Info("data file initialized: ", cfg.DataFile)
 	}
 
@@ -121,7 +126,11 @@ func run(log log.ContextLogger, cfg *config.Config) error {
 	if err := engineInstance.Start(); err != nil {
 		return E.Cause(err, "start engine")
 	}
-	defer engineInstance.Close()
+	defer func() {
+		if err := engineInstance.Close(); err != nil {
+			log.Error("close engine: ", err)
+		}
+	}()
 
 	// Setup reload mechanism
 	reloadChan := make(chan struct{}, 1)

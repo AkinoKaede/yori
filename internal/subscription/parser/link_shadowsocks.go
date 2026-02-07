@@ -23,8 +23,8 @@ func ParseShadowsocksLink(link string) (option.Outbound, error) {
 	}
 
 	var options option.ShadowsocksOutboundOptions
-	options.ServerOptions.Server = linkURL.Hostname()
-	options.ServerOptions.ServerPort = portFromString(linkURL.Port())
+	options.Server = linkURL.Hostname()
+	options.ServerPort = portFromString(linkURL.Port())
 	if password, _ := linkURL.User.Password(); password != "" {
 		options.Method = linkURL.User.Username()
 		options.Password = password

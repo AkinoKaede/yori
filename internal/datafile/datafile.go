@@ -11,9 +11,7 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-const (
-	bucketPassword = "password"
-)
+const bucketPassword = "password"
 
 // DataFile manages persistent user password storage using bbolt
 type DataFile struct {
@@ -49,7 +47,9 @@ func (d *DataFile) Start() error {
 		return err
 	})
 	if err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			return E.Errors(E.Cause(err, "create buckets"), E.Cause(closeErr, "close data database"))
+		}
 		return E.Cause(err, "create buckets")
 	}
 
@@ -100,11 +100,9 @@ func (d *DataFile) LoadPassword(ctx context.Context, username string) string {
 		password = string(data)
 		return nil
 	})
-
 	if err != nil {
 		return ""
 	}
-
 	return password
 }
 

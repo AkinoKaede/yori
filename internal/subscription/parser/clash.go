@@ -6,18 +6,17 @@ import (
 	"context"
 	"strings"
 
+	"github.com/metacubex/mihomo/adapter"
+	clash_outbound "github.com/metacubex/mihomo/adapter/outbound"
+	"github.com/metacubex/mihomo/common/structure"
+	"github.com/metacubex/mihomo/config"
+	"github.com/metacubex/mihomo/constant"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/format"
 	"github.com/sagernet/sing/common/json/badoption"
 	N "github.com/sagernet/sing/common/network"
-
-	"github.com/metacubex/mihomo/adapter"
-	clash_outbound "github.com/metacubex/mihomo/adapter/outbound"
-	"github.com/metacubex/mihomo/common/structure"
-	"github.com/metacubex/mihomo/config"
-	"github.com/metacubex/mihomo/constant"
 )
 
 func ParseClashSubscription(_ context.Context, content string) ([]option.Outbound, error) {

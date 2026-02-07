@@ -11,9 +11,7 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-const (
-	bucketSubscription = "subscription"
-)
+const bucketSubscription = "subscription"
 
 // CacheFile manages persistent subscription cache using bbolt
 type CacheFile struct {
@@ -49,7 +47,9 @@ func (c *CacheFile) Start() error {
 		return err
 	})
 	if err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			return E.Errors(E.Cause(err, "create buckets"), E.Cause(closeErr, "close cache database"))
+		}
 		return E.Cause(err, "create buckets")
 	}
 
@@ -99,11 +99,9 @@ func (c *CacheFile) LoadSubscription(ctx context.Context, name string) *Subscrip
 
 		return subscription.UnmarshalBinary(ctx, data)
 	})
-
 	if err != nil {
 		return nil
 	}
-
 	return &subscription
 }
 

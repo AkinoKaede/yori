@@ -10,6 +10,7 @@ import (
 
 	"github.com/AkinoKaede/proxy-relay/internal/datafile"
 	"github.com/AkinoKaede/proxy-relay/internal/inbound"
+
 	"github.com/sagernet/sing-box/option"
 )
 

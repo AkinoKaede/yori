@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/AkinoKaede/proxy-relay/internal/inbound"
+
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json"
@@ -330,7 +331,9 @@ func (s *Server) handleBase64(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Subscription-Userinfo", "upload=0; download=0; total=0; expire=0")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(encoded))
+	if _, err := w.Write([]byte(encoded)); err != nil {
+		s.logger.Error("write response: ", err)
+	}
 }
 
 // handleSub auto-detects format based on User-Agent and returns appropriate subscription
@@ -460,7 +463,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
+	if _, err := w.Write([]byte(html)); err != nil {
+		s.logger.Error("write response: ", err)
+	}
 }
 
 // buildHysteria2Link creates a hysteria2:// URL format
@@ -535,14 +540,14 @@ func (s *Server) buildHysteria2Outbound(user inbound.User) option.Outbound {
 	if len(s.state.PublicPorts) == 1 && !strings.Contains(s.state.PublicPorts[0], ":") {
 		var singlePort uint16
 		if _, err := fmt.Sscanf(s.state.PublicPorts[0], "%d", &singlePort); err == nil {
-			hysteria2Opts.ServerOptions.ServerPort = singlePort
+			hysteria2Opts.ServerPort = singlePort
 		}
 	} else if len(s.state.PublicPorts) > 0 {
 		hysteria2Opts.ServerPorts = s.state.PublicPorts
 	}
 
 	if s.state.SNI != "" {
-		hysteria2Opts.OutboundTLSOptionsContainer.TLS = &option.OutboundTLSOptions{
+		hysteria2Opts.TLS = &option.OutboundTLSOptions{
 			Enabled:    true,
 			ServerName: s.state.SNI,
 		}
@@ -580,29 +585,3 @@ func convertPortsForLink(portSpecs []string) string {
 // expandPortRanges expands port ranges like "443:453" to individual port strings
 // Input: ["443", "1000:1002", "8443"]
 // Output: ["443", "1000", "1001", "1002", "8443"]
-func expandPortRanges(portSpecs []string) []string {
-	var result []string
-
-	for _, spec := range portSpecs {
-		// Check if it's a range (contains ":")
-		if strings.Contains(spec, ":") {
-			parts := strings.Split(spec, ":")
-			if len(parts) == 2 {
-				var start, end int
-				if _, err := fmt.Sscanf(parts[0], "%d", &start); err == nil {
-					if _, err := fmt.Sscanf(parts[1], "%d", &end); err == nil {
-						// Expand range
-						for port := start; port <= end; port++ {
-							result = append(result, fmt.Sprintf("%d", port))
-						}
-						continue
-					}
-				}
-			}
-		}
-		// Not a range or invalid range, add as-is
-		result = append(result, spec)
-	}
-
-	return result
-}
