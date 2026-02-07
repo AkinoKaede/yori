@@ -89,21 +89,21 @@ http:
   listen: "0.0.0.0"
   port: 8080
   
-  # Optional: Multi-user authentication with pattern-based filtering
-  # Each user gets different Hysteria2 credentials mapped to their username
+  # Optional: Multi-user authentication with subscription-based filtering
+  # Each user gets access to specific subscriptions by name
   users:
     - username: "alice"
       password: "alice-strong-password"
-      pattern: [".*US.*", ".*JP.*"]  # Alice can only access US and JP nodes
+      subscriptions: ["main-provider"]  # Alice can only access main-provider subscription
     
     - username: "bob"
       password: "bob-strong-password"
-      pattern: [".*HK.*", ".*SG.*"]  # Bob can only access HK and SG nodes
+      subscriptions: ["secondary-provider"]  # Bob can only access secondary-provider subscription
     
-    # User with full access (empty pattern = match all)
+    # User with full access (empty subscriptions = all subscriptions)
     - username: "admin"
       password: "admin-strong-password"
-      pattern: []
+      subscriptions: []  # Access to all subscriptions
   
   # Optional: Rename nodes in subscription output (applied after process rules)
   rename:
@@ -204,11 +204,11 @@ http:
   users:
     - username: "vip"
       password: "vip-password"
-      pattern: []  # Full access
+      subscriptions: []  # Full access to all subscriptions
     
     - username: "basic"
       password: "basic-password"
-      pattern: [".*(?i)(us|jp|hk).*"]  # Limited access
+      subscriptions: ["provider-a"]  # Only access provider-a
   
   # Rename in subscription output
   rename:

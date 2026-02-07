@@ -405,6 +405,52 @@ func (m *Manager) GetSubscriptions() []*Subscription {
 	return append([]*Subscription{}, m.subscriptions...)
 }
 
+// GetOutboundsBySubscription returns outbounds grouped by subscription name
+func (m *Manager) GetOutboundsBySubscription() map[string][]option.Outbound {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make(map[string][]option.Outbound)
+	for _, sub := range m.subscriptions {
+		result[sub.Name] = append([]option.Outbound{}, sub.Outbounds...)
+	}
+	return result
+}
+
+// MergeBySubscriptionNames merges outbounds from specified subscriptions
+// If subscriptionNames is empty, returns all outbounds
+func (m *Manager) MergeBySubscriptionNames(subscriptionNames []string) []option.Outbound {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var merged []option.Outbound
+
+	// If no specific subscriptions requested, return all
+	if len(subscriptionNames) == 0 {
+		for _, sub := range m.subscriptions {
+			merged = append(merged, sub.Outbounds...)
+		}
+	} else {
+		// Build a set of requested subscription names
+		requested := make(map[string]bool)
+		for _, name := range subscriptionNames {
+			requested[name] = true
+		}
+
+		// Only merge from requested subscriptions
+		for _, sub := range m.subscriptions {
+			if requested[sub.Name] {
+				merged = append(merged, sub.Outbounds...)
+			}
+		}
+	}
+
+	// Deduplicate tags to avoid conflicts
+	merged = deduplicateOutboundTags(merged)
+
+	return merged
+}
+
 // Close cleans up the manager
 func (m *Manager) Close() error {
 	m.httpClient.CloseIdleConnections()

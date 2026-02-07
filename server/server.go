@@ -33,7 +33,6 @@ type ServerConfig struct {
 type HTTPUser struct {
 	Username string
 	Password string
-	Patterns []*regexp.Regexp
 }
 
 // State holds the server state information
@@ -86,19 +85,8 @@ func NewServer(ctx context.Context, logger logger.Logger, cfg *ServerConfig) *Se
 		})
 	}
 
-	// Compile user patterns
-	var users []HTTPUser
-	for _, user := range cfg.Users {
-		var patterns []*regexp.Regexp
-		for _, p := range user.Patterns {
-			patterns = append(patterns, p)
-		}
-		users = append(users, HTTPUser{
-			Username: user.Username,
-			Password: user.Password,
-			Patterns: patterns,
-		})
-	}
+	// Copy user list (no patterns to compile anymore)
+	users := append([]HTTPUser{}, cfg.Users...)
 
 	return &Server{
 		ctx:            serverCtx,

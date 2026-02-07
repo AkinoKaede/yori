@@ -12,29 +12,55 @@ import (
 	"github.com/sagernet/sing-box/option"
 )
 
-// GenerateUsers creates Hysteria2 users from outbounds and HTTP usernames
-// For each username and outbound combination, it generates a unique Hysteria2 user
+// GenerateUsers creates Hysteria2 users from outbounds and HTTP user configurations
+// For each username and its allowed outbounds, it generates unique Hysteria2 users
 // Username format: base64(httpUsername:outboundTag)
 // Password format: base64Username:base64(32randomBytes)
 // Returns: users, userToOutbound mapping, httpUserToHysteria2Users mapping
 func GenerateUsers(
 	ctx context.Context,
-	outbounds []option.Outbound,
-	usernames []string,
+	outboundsBySubscription map[string][]option.Outbound,
+	httpUsers map[string][]string, // HTTP username -> allowed subscription names (empty = all)
 	dataFile *datafile.DataFile,
 ) ([]option.Hysteria2User, map[string]string, map[string][]string) {
-	// If no usernames configured, use default "user"
-	if len(usernames) == 0 {
-		usernames = []string{"user"}
+	// If no users configured, use default "user" with access to all subscriptions
+	if len(httpUsers) == 0 {
+		httpUsers = map[string][]string{"user": nil}
 	}
 
-	// Calculate capacity: each outbound × each HTTP username
-	capacity := len(outbounds) * len(usernames)
-	users := make([]option.Hysteria2User, 0, capacity)
-	userToOutbound := make(map[string]string, capacity)
+	// Build list of all outbounds for each user
+	userOutbounds := make(map[string][]option.Outbound)
+	for username, subscriptionNames := range httpUsers {
+		var outbounds []option.Outbound
+
+		// If no specific subscriptions, grant access to all
+		if len(subscriptionNames) == 0 {
+			for _, subs := range outboundsBySubscription {
+				outbounds = append(outbounds, subs...)
+			}
+		} else {
+			// Only include outbounds from specified subscriptions
+			for _, subName := range subscriptionNames {
+				if subs, exists := outboundsBySubscription[subName]; exists {
+					outbounds = append(outbounds, subs...)
+				}
+			}
+		}
+
+		userOutbounds[username] = outbounds
+	}
+
+	// Calculate total capacity
+	totalCapacity := 0
+	for _, outbounds := range userOutbounds {
+		totalCapacity += len(outbounds)
+	}
+
+	users := make([]option.Hysteria2User, 0, totalCapacity)
+	userToOutbound := make(map[string]string, totalCapacity)
 	httpUserToHysteria2Users := make(map[string][]string) // HTTP username -> Hysteria2 usernames
 
-	for _, username := range usernames {
+	for username, outbounds := range userOutbounds {
 		httpUserToHysteria2Users[username] = make([]string, 0, len(outbounds))
 
 		for _, outbound := range outbounds {
@@ -77,24 +103,4 @@ func GenerateUsers(
 	}
 
 	return users, userToOutbound, httpUserToHysteria2Users
-}
-
-// UserMapping represents the mapping between users and outbounds
-type UserMapping struct {
-	Users          []option.Hysteria2User
-	UserToOutbound map[string]string
-}
-
-// NewUserMapping creates a new user mapping from outbounds and HTTP usernames
-func NewUserMapping(
-	ctx context.Context,
-	outbounds []option.Outbound,
-	usernames []string,
-	dataFile *datafile.DataFile,
-) *UserMapping {
-	users, mapping, _ := GenerateUsers(ctx, outbounds, usernames, dataFile)
-	return &UserMapping{
-		Users:          users,
-		UserToOutbound: mapping,
-	}
 }

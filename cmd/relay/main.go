@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"regexp"
 	"syscall"
 	"time"
 
@@ -108,7 +107,10 @@ func run(log log.ContextLogger, cfg *config.Config) error {
 		log.Warn("Some subscriptions failed to fetch: ", err)
 	}
 
-	// Merge outbounds
+	// Get outbounds grouped by subscription
+	outboundsBySubscription := subManager.GetOutboundsBySubscription()
+
+	// Merge all outbounds for sing-box configuration
 	outbounds := subManager.MergeAll()
 	log.Info("Merged ", len(outbounds), " outbounds from all subscriptions")
 
@@ -116,15 +118,15 @@ func run(log log.ContextLogger, cfg *config.Config) error {
 		return E.New("no outbounds available, check subscription configuration")
 	}
 
-	// Extract usernames from HTTP users
-	var usernames []string
+	// Build HTTP user to subscriptions mapping
+	httpUsers := make(map[string][]string)
 	for _, user := range cfg.HTTP.Users {
-		usernames = append(usernames, user.Username)
+		httpUsers[user.Username] = user.Subscriptions
 	}
 
-	// Generate users (one per HTTP username × outbound combination)
-	users, userMapping, httpUserMapping := generator.GenerateUsers(ctx, outbounds, usernames, dataFile)
-	log.Info("Generated ", len(users), " users")
+	// Generate users (filtered by subscription names)
+	users, userMapping, httpUserMapping := generator.GenerateUsers(ctx, outboundsBySubscription, httpUsers, dataFile)
+	log.Info("Generated ", len(users), " users for ", len(httpUsers), " HTTP user(s)")
 
 	// Generate sing-box configuration
 	boxConfig, err := generator.GenerateConfig(cfg, outbounds, users, userMapping)
@@ -173,21 +175,11 @@ func run(log log.ContextLogger, cfg *config.Config) error {
 		serverCfg.KeyPath = cfg.HTTP.TLS.KeyPath
 	}
 
-	// Compile HTTP user patterns
+	// Copy HTTP users (no pattern compilation needed)
 	for _, user := range cfg.HTTP.Users {
-		var patterns []*regexp.Regexp
-		for _, pattern := range user.Pattern {
-			regex, err := regexp.Compile(pattern)
-			if err != nil {
-				log.Warn("invalid HTTP user pattern: ", pattern, ": ", err)
-				continue
-			}
-			patterns = append(patterns, regex)
-		}
 		serverCfg.Users = append(serverCfg.Users, server.HTTPUser{
 			Username: user.Username,
 			Password: user.Password,
-			Patterns: patterns,
 		})
 	}
 
@@ -266,7 +258,10 @@ func reload(
 		// Continue anyway - we might have cached data
 	}
 
-	// Merge outbounds
+	// Get outbounds grouped by subscription
+	outboundsBySubscription := subManager.GetOutboundsBySubscription()
+
+	// Merge outbounds for sing-box configuration
 	outbounds := subManager.MergeAll()
 	log.Info("Reloaded ", len(outbounds), " outbounds")
 
@@ -274,15 +269,15 @@ func reload(
 		return E.New("no outbounds after reload")
 	}
 
-	// Extract usernames from HTTP users (may have changed)
-	var usernames []string
+	// Build HTTP user to subscriptions mapping (may have changed)
+	httpUsers := make(map[string][]string)
 	for _, user := range newCfg.HTTP.Users {
-		usernames = append(usernames, user.Username)
+		httpUsers[user.Username] = user.Subscriptions
 	}
 
-	// Generate new users (one per HTTP username × outbound combination)
-	users, userMapping, httpUserMapping := generator.GenerateUsers(ctx, outbounds, usernames, dataFile)
-	log.Info("Generated ", len(users), " users for ", len(usernames), " HTTP user(s)")
+	// Generate new users (filtered by subscription names)
+	users, userMapping, httpUserMapping := generator.GenerateUsers(ctx, outboundsBySubscription, httpUsers, dataFile)
+	log.Info("Generated ", len(users), " users for ", len(httpUsers), " HTTP user(s)")
 
 	// Generate new sing-box configuration
 	boxConfig, err := generator.GenerateConfig(newCfg, outbounds, users, userMapping)
@@ -309,24 +304,14 @@ func reload(
 	}
 
 	// Update HTTP server users and rename patterns
-	var httpUsers []server.HTTPUser
+	var httpServerUsers []server.HTTPUser
 	for _, user := range newCfg.HTTP.Users {
-		var patterns []*regexp.Regexp
-		for _, pattern := range user.Pattern {
-			regex, err := regexp.Compile(pattern)
-			if err != nil {
-				log.Warn("invalid HTTP user pattern: ", pattern, ": ", err)
-				continue
-			}
-			patterns = append(patterns, regex)
-		}
-		httpUsers = append(httpUsers, server.HTTPUser{
+		httpServerUsers = append(httpServerUsers, server.HTTPUser{
 			Username: user.Username,
 			Password: user.Password,
-			Patterns: patterns,
 		})
 	}
-	httpServer.UpdateUsers(httpUsers)
+	httpServer.UpdateUsers(httpServerUsers)
 	httpServer.UpdateRenamePatterns(newCfg.HTTP.Rename)
 
 	// Update HTTP server state

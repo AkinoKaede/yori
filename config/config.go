@@ -64,9 +64,9 @@ type HTTPConfig struct {
 
 // HTTPUser for Basic Auth and user filtering
 type HTTPUser struct {
-	Username string   `yaml:"username"`
-	Password string   `yaml:"password"`
-	Pattern  []string `yaml:"pattern"` // Regex patterns to filter Hysteria2 users
+	Username      string   `yaml:"username"`
+	Password      string   `yaml:"password"`
+	Subscriptions []string `yaml:"subscriptions"` // Subscription names to filter (empty = all subscriptions)
 }
 
 // Hysteria2Config for Hysteria2 inbound configuration
