@@ -253,8 +253,12 @@ func (s *Server) UpdateRenamePatterns(rename map[string]string) {
 // authenticate checks HTTP Basic Auth and returns the authenticated user's username
 // If no users configured, returns "user" as default
 func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) string {
+	s.stateMu.RLock()
+	users := s.users
+	s.stateMu.RUnlock()
+
 	// If no users configured, allow access as default "user"
-	if len(s.users) == 0 {
+	if len(users) == 0 {
 		return "user"
 	}
 
@@ -266,8 +270,8 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) string {
 	}
 
 	// Find matching user with constant-time comparison
-	for i := range s.users {
-		user := &s.users[i]
+	for i := range users {
+		user := &users[i]
 		usernameMatch := subtle.ConstantTimeCompare([]byte(user.Username), []byte(username)) == 1
 		passwordMatch := subtle.ConstantTimeCompare([]byte(user.Password), []byte(password)) == 1
 		if usernameMatch && passwordMatch {
