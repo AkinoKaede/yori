@@ -15,6 +15,7 @@ import (
 	"github.com/AkinoKaede/proxy-relay/internal/cachefile"
 	"github.com/AkinoKaede/proxy-relay/internal/config"
 	"github.com/AkinoKaede/proxy-relay/internal/subscription/parser"
+	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
@@ -46,6 +47,7 @@ type Subscription struct {
 
 // NewManager creates a new subscription manager
 func NewManager(ctx context.Context, logger logger.Logger, cfg *config.Config) (*Manager, error) {
+	ctx = include.Context(ctx)
 	subscriptions := make([]*Subscription, 0, len(cfg.Subscriptions))
 
 	for i, subCfg := range cfg.Subscriptions {

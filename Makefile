@@ -3,13 +3,11 @@
 GO ?= go
 BINARY ?= relay
 CMD ?= ./cmd/relay
-BIN_DIR ?= .
-TAGS ?=
+TAGS ?= with_acme
 LDFLAGS ?=
 
 build:
-	mkdir -p $(BIN_DIR)
-	$(GO) build -tags "$(TAGS)" -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(CMD)
+	$(GO) build -tags "$(TAGS)" -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
 
 build-grpc:
 	$(MAKE) build TAGS="$(TAGS) with_grpc"

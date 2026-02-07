@@ -10,6 +10,8 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
+	"github.com/sagernet/sing-box/dns"
+	"github.com/sagernet/sing-box/dns/transport/local"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -27,6 +29,7 @@ type Manager struct {
 	logger   log.ContextLogger
 	registry *outbound.Registry
 	connMgr  *route.ConnectionManager
+	dnsMgr   *dns.TransportManager
 
 	mu        sync.RWMutex
 	outbounds map[string]adapter.Outbound
@@ -38,6 +41,32 @@ type Manager struct {
 type trackedOutbound struct {
 	active   int
 	draining bool
+}
+
+type noopInboundManager struct{}
+
+func (m *noopInboundManager) Start(stage adapter.StartStage) error {
+	return nil
+}
+
+func (m *noopInboundManager) Close() error {
+	return nil
+}
+
+func (m *noopInboundManager) Inbounds() []adapter.Inbound {
+	return nil
+}
+
+func (m *noopInboundManager) Get(tag string) (adapter.Inbound, bool) {
+	return nil, false
+}
+
+func (m *noopInboundManager) Remove(tag string) error {
+	return nil
+}
+
+func (m *noopInboundManager) Create(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, inboundType string, options any) error {
+	return E.New("inbound manager is not available")
 }
 
 // NewManager creates a new outbound manager with sing-box registries.
@@ -56,9 +85,31 @@ func NewManager(ctx context.Context, logger log.ContextLogger, connMgr *route.Co
 
 	baseCtx = service.ContextWith[adapter.ConnectionManager](baseCtx, connMgr)
 	baseCtx = service.ContextWith[adapter.OutboundManager](baseCtx, m)
+	baseCtx = m.withDNSManager(baseCtx)
 	m.ctx = baseCtx
 
 	return m
+}
+
+func (m *Manager) withDNSManager(ctx context.Context) context.Context {
+	if m.dnsMgr != nil {
+		return service.ContextWith[adapter.DNSTransportManager](ctx, m.dnsMgr)
+	}
+	if service.FromContext[adapter.InboundManager](ctx) == nil {
+		ctx = service.ContextWith[adapter.InboundManager](ctx, &noopInboundManager{})
+	}
+	manager := dns.NewTransportManager(m.logger, include.DNSTransportRegistry(), m, "")
+	manager.Initialize(func() (adapter.DNSTransport, error) {
+		return local.NewTransport(ctx, m.logger, "default", option.LocalDNSServerOptions{})
+	})
+	for _, stage := range adapter.ListStartStages {
+		if err := adapter.LegacyStart(manager, stage); err != nil {
+			m.logger.Warn("start dns manager: ", err)
+			break
+		}
+	}
+	m.dnsMgr = manager
+	return service.ContextWith[adapter.DNSTransportManager](ctx, manager)
 }
 
 // Start is a no-op for the custom manager.
@@ -123,13 +174,20 @@ func (m *Manager) Close() error {
 	for _, ob := range m.outbounds {
 		toClose = append(toClose, ob)
 	}
+	dnsMgr := m.dnsMgr
 	m.outbounds = make(map[string]adapter.Outbound)
 	m.ordered = nil
 	m.hashes = make(map[string]string)
 	m.tracked = make(map[adapter.Outbound]*trackedOutbound)
+	m.dnsMgr = nil
 	m.mu.Unlock()
 
 	var err error
+	if dnsMgr != nil {
+		err = E.Append(err, dnsMgr.Close(), func(err error) error {
+			return E.Cause(err, "close dns manager")
+		})
+	}
 	for _, ob := range toClose {
 		err = E.Append(err, common.Close(ob), func(err error) error {
 			return E.Cause(err, "close outbound")
