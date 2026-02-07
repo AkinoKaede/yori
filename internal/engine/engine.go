@@ -368,6 +368,11 @@ func buildServerState(cfg *config.Config, subManager *subscription.Manager, user
 		obfsPassword = cfg.Hysteria2.Obfs.Password
 	}
 
+	var directTag string
+	if cfg.Direct != nil && cfg.Direct.Enabled {
+		directTag = cfg.Direct.Tag
+	}
+
 	return &server.State{
 		Users:                    users,
 		LocalOnlyTags:            subManager.GetLocalOnlyTags(),
@@ -377,6 +382,7 @@ func buildServerState(cfg *config.Config, subManager *subscription.Manager, user
 		SNI:                      sni,
 		Obfs:                     obfsType,
 		ObfsPassword:             obfsPassword,
+		DirectTag:                directTag,
 	}
 }
 

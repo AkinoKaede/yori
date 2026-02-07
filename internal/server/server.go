@@ -49,6 +49,7 @@ type State struct {
 	SNI                      string
 	Obfs                     string
 	ObfsPassword             string
+	DirectTag                string // Tag of the direct outbound; rename is skipped for it
 }
 
 // renamePattern holds compiled regex and replacement string
@@ -416,8 +417,8 @@ func (s *Server) handleSingbox(w http.ResponseWriter, r *http.Request) {
 	var outbounds []option.Outbound
 	for _, user := range filteredUsers {
 		outbound := s.buildHysteria2Outbound(user)
-		// Apply rename patterns
-		if len(s.renamePatterns) > 0 {
+		// Apply rename patterns (skip direct outbound)
+		if len(s.renamePatterns) > 0 && (s.state.DirectTag == "" || user.Outbound != s.state.DirectTag) {
 			outbound.Tag = s.applyRename(outbound.Tag)
 		}
 		outbounds = append(outbounds, outbound)
@@ -542,8 +543,8 @@ func (s *Server) buildHysteria2Link(user inbound.User, portList string) string {
 
 	name := user.Outbound
 	if name != "" {
-		// Apply rename patterns
-		if len(s.renamePatterns) > 0 {
+		// Apply rename patterns (skip direct outbound)
+		if len(s.renamePatterns) > 0 && (s.state.DirectTag == "" || name != s.state.DirectTag) {
 			name = s.applyRename(name)
 		}
 		link += "#" + name
