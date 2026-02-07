@@ -1,15 +1,11 @@
-/relay
+/yori
+/yori.exe
+
+/acme
+config.yaml
+*.db
 
 .DS_Store
 
 .vscode
 .idea
-
-*.log
-*.swp
-*.db
-*.cache
-*.exe
-
-config.yaml
-/acme

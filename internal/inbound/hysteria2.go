@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AkinoKaede/proxy-relay/internal/config"
+	"github.com/AkinoKaede/yori/internal/config"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/listener"

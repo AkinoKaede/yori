@@ -8,8 +8,8 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/AkinoKaede/proxy-relay/internal/datafile"
-	"github.com/AkinoKaede/proxy-relay/internal/inbound"
+	"github.com/AkinoKaede/yori/internal/datafile"
+	"github.com/AkinoKaede/yori/internal/inbound"
 
 	"github.com/sagernet/sing-box/option"
 )

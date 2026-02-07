@@ -1,17 +1,17 @@
 .PHONY: build build-grpc run run-grpc test tidy fmt fmt_install lint lint_install clean
 
-NAME = proxy-relay
+NAME = yori
 COMMIT = $(shell git rev-parse --short HEAD)
 TAG = $(shell git describe --tags --always)
 VERSION = $(TAG:v%=%)
 
 GO ?= go
-BINARY ?= relay
+BINARY ?= yori
 CMD ?= ./cmd/relay
 TAGS ?= with_acme
 LDFLAGS ?=
 
-PARAMS = -v -trimpath -ldflags "-X 'github.com/AkinoKaede/proxy-relay/pkg/constant.Version=$(VERSION)' -s -w -buildid= $(LDFLAGS)"
+PARAMS = -v -trimpath -ldflags "-X 'github.com/AkinoKaede/yori/pkg/constant.Version=$(VERSION)' -s -w -buildid= $(LDFLAGS)"
 
 build:
 	$(GO) build $(PARAMS) -tags "$(TAGS)" -o $(BINARY) $(CMD)

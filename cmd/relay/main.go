@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/AkinoKaede/proxy-relay/internal/config"
-	"github.com/AkinoKaede/proxy-relay/internal/datafile"
-	"github.com/AkinoKaede/proxy-relay/internal/engine"
-	"github.com/AkinoKaede/proxy-relay/pkg/constant"
+	"github.com/AkinoKaede/yori/internal/config"
+	"github.com/AkinoKaede/yori/internal/datafile"
+	"github.com/AkinoKaede/yori/internal/engine"
+	"github.com/AkinoKaede/yori/pkg/constant"
 
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -64,7 +64,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to create logger: %v\n", err)
 		os.Exit(1)
 	}
-	logger := logFactory.NewLogger("proxy-relay")
+	logger := logFactory.NewLogger("yori")
 
 	if err := run(logger, cfg); err != nil {
 		logger.Error("fatal: ", err)
@@ -81,7 +81,7 @@ func printVersion() {
 	if coreVersion == "" {
 		coreVersion = "unknown"
 	}
-	fmt.Printf("proxy-relay version %s (sing-box %s)\n\n", version, coreVersion)
+	fmt.Printf("yori version %s (sing-box %s)\n\n", version, coreVersion)
 	fmt.Printf("Environment: %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 
 	var revision string

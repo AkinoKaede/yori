@@ -1,4 +1,6 @@
-# Proxy Relay
+# yori
+
+Your Outbound Relay Integrator.
 
 A Hysteria2-based relay proxy that dynamically fetches outbounds from multiple subscription sources, generates stable user credentials, and provides HTTP subscription endpoints.
 
@@ -51,6 +53,9 @@ A Hysteria2-based relay proxy that dynamically fetches outbounds from multiple s
 ```bash
 cd proxy-relay
 make build
+
+# If your repo folder is named yori instead:
+# cd yori
 ```
 
 ### Download Binary
@@ -172,7 +177,7 @@ This allows you to:
 ### Start the Service
 
 ```bash
-./relay -c config.yaml
+./yori -c config.yaml
 ```
 
 ### Reload Configuration
@@ -181,7 +186,7 @@ This allows you to:
 
 ```bash
 # Find the process ID
-pidof relay
+pidof yori
 
 # Send SIGHUP signal
 kill -HUP <pid>
@@ -193,17 +198,17 @@ The service automatically reloads based on `reload_interval` and individual subs
 
 ### Systemd Service
 
-Create `/etc/systemd/system/proxy-relay.service`:
+Create `/etc/systemd/system/yori.service`:
 
 ```ini
 [Unit]
-Description=Proxy Relay Service
+Description=yori Service
 After=network.target
 
 [Service]
 Type=simple
 User=nobody
-ExecStart=/usr/local/bin/relay -c /etc/proxy-relay/config.yaml
+ExecStart=/usr/local/bin/yori -c /etc/yori/config.yaml
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s
@@ -216,14 +221,14 @@ Enable and start:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now proxy-relay
-sudo systemctl status proxy-relay
+sudo systemctl enable --now yori
+sudo systemctl status yori
 ```
 
 Reload configuration:
 
 ```bash
-sudo systemctl reload proxy-relay
+sudo systemctl reload yori
 ```
 
 ## Subscription Endpoints
@@ -346,7 +351,7 @@ Check logs for filter match counts:
 
 ```bash
 # Enable debug logging in code or check info logs
-tail -f /var/log/proxy-relay.log
+tail -f /var/log/yori.log
 ```
 
 Verify filter regex:
@@ -402,5 +407,5 @@ Pull requests welcome! Please ensure:
 
 ## Support
 
-- Issues: [GitHub Issues](https://github.com/AkinoKaede/proxy-relay/issues)
-- Discussions: [GitHub Discussions](https://github.com/AkinoKaede/proxy-relay/discussions)
+- Issues: [GitHub Issues](https://github.com/AkinoKaede/yori/issues)
+- Discussions: [GitHub Discussions](https://github.com/AkinoKaede/yori/discussions)

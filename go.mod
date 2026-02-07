@@ -1,4 +1,4 @@
-module github.com/AkinoKaede/proxy-relay
+module github.com/AkinoKaede/yori
 
 go 1.24.7
 

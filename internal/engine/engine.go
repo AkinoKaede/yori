@@ -12,12 +12,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/AkinoKaede/proxy-relay/internal/config"
-	"github.com/AkinoKaede/proxy-relay/internal/datafile"
-	"github.com/AkinoKaede/proxy-relay/internal/inbound"
-	"github.com/AkinoKaede/proxy-relay/internal/outbound"
-	"github.com/AkinoKaede/proxy-relay/internal/server"
-	"github.com/AkinoKaede/proxy-relay/internal/subscription"
+	"github.com/AkinoKaede/yori/internal/config"
+	"github.com/AkinoKaede/yori/internal/datafile"
+	"github.com/AkinoKaede/yori/internal/inbound"
+	"github.com/AkinoKaede/yori/internal/outbound"
+	"github.com/AkinoKaede/yori/internal/server"
+	"github.com/AkinoKaede/yori/internal/subscription"
 
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"

@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/AkinoKaede/proxy-relay/internal/config"
-	"github.com/AkinoKaede/proxy-relay/internal/utils"
+	"github.com/AkinoKaede/yori/internal/config"
+	"github.com/AkinoKaede/yori/internal/utils"
 
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"

@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AkinoKaede/proxy-relay/internal/inbound"
+	"github.com/AkinoKaede/yori/internal/inbound"
 
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -403,7 +403,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proxy Relay Subscription Server</title>
+	<title>YORI Subscription Server</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -443,7 +443,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 </head>
 <body>
     <div class="container">
-        <h1>Proxy Relay Subscription Server</h1>
+		<h1>YORI Subscription Server</h1>
         <p>Available subscription endpoints:</p>
         
         <div class="endpoint">

@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AkinoKaede/proxy-relay/internal/cachefile"
-	"github.com/AkinoKaede/proxy-relay/internal/config"
-	"github.com/AkinoKaede/proxy-relay/internal/subscription/parser"
-	"github.com/AkinoKaede/proxy-relay/pkg/constant"
+	"github.com/AkinoKaede/yori/internal/cachefile"
+	"github.com/AkinoKaede/yori/internal/config"
+	"github.com/AkinoKaede/yori/internal/subscription/parser"
+	"github.com/AkinoKaede/yori/pkg/constant"
 
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
@@ -199,7 +199,7 @@ func (m *Manager) fetchFromHTTP(sub *Subscription) error {
 		if version == "" {
 			version = "unknown"
 		}
-		req.Header.Set("User-Agent", fmt.Sprintf("proxy-relay/%s (sing-box %s; like serenity/%s; Clash compatible)", version, constant.CoreVersion(), constant.LikeSerenityVersion))
+		req.Header.Set("User-Agent", fmt.Sprintf("yori/%s (sing-box %s; like serenity/%s; Clash compatible)", version, constant.CoreVersion(), constant.LikeSerenityVersion))
 	}
 
 	// Set ETag for conditional request
