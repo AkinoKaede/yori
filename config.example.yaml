@@ -13,22 +13,22 @@ subscriptions:
   # Primary subscription with comprehensive filtering
   - name: "main-provider"
     url: "https://example.com/subscription?token=YOUR_TOKEN"
-    user_agent: "clash-verge/1.0"  # Optional: Custom User-Agent
+    user_agent: "clash-verge/1.0" # Optional: Custom User-Agent
     process:
       # Step 1: Filter by protocol types
       - filter_type: ["shadowsocks", "vmess", "trojan", "hysteria2"]
-      
+
       # Step 2: Exclude nodes with certain keywords
       - exclude: [".*(?i)(expired|过期|到期).*"]
-      
+
       # Step 3: Rename nodes - remove emoji and standardize format
       - remove_emoji: true
         rename:
           "^🇺🇸\\s*(.*)$": "US-$1"
           "^🇯🇵\\s*(.*)$": "JP-$1"
           "^🇭🇰\\s*(.*)$": "HK-$1"
-          "^\\[.*?\\]\\s*(.*)$": "$1"  # Remove [tags]
-      
+          "^\\[.*?\\]\\s*(.*)$": "$1" # Remove [tags]
+
       # Step 4: Enable multiplex for better performance
       - filter_type: ["shadowsocks", "vmess", "trojan"]
         rewrite_multiplex:
@@ -36,7 +36,7 @@ subscriptions:
           protocol: "smux"
           max_connections: 4
           min_streams: 4
-      
+
       # Step 5: Configure dialer options for specific nodes
       - filter: [".*premium.*"]
         rewrite_dialer_options:
@@ -46,18 +46,18 @@ subscriptions:
           reuse_addr: false
           tcp_fast_open: true
           tcp_multi_path: false
-      
+
       # Step 6: Use invert to exclude instead of include
       - filter: [".*CN.*", ".*China.*", ".*中国.*"]
-        invert: true  # Keep everything EXCEPT China nodes
+        invert: true # Keep everything EXCEPT China nodes
 
       # Step 7: Mark non-relayed nodes and customize names
       # local_only nodes are never shown in HTTP subscriptions (for all users)
       - filter: [".*(?i)(internal|local|onlyme).*"]
         local_only: true
         rename:
-          "^(.*)$": "Local-$1"  # Custom name for local-only nodes
-      
+          "^(.*)$": "Local-$1" # Custom name for local-only nodes
+
       # Step 8: Enable uTLS for anti-detection
       - filter_type: ["trojan", "vmess"]
         rewrite_utls:
@@ -66,7 +66,7 @@ subscriptions:
 
   # Backup subscription from local file
   - name: "backup-local"
-    url: "file://backup-nodes.json"  # Can be relative or absolute path
+    url: "file://backup-nodes.json" # Can be relative or absolute path
     process:
       - filter: ["backup-.*"]
 
@@ -78,11 +78,11 @@ subscriptions:
       - filter: [".*(?i)(hong kong|singapore|香港|新加坡).*"]
       # Remove emojis
       - remove_emoji: true
-      
+
       # Mark internal/management nodes as local-only (won't be shared via HTTP subscription)
       - filter: [".*(?i)(internal|管理|monitor|监控).*"]
         local_only: true
-      
+
       # Remove expired or bad nodes completely
       - filter: [".*(?i)(expired|过期|维护中).*"]
         remove: true
@@ -102,33 +102,33 @@ reload_interval: "0"
 http:
   listen: "0.0.0.0"
   port: 8080
-  
+
   # Optional: Multi-user authentication with subscription-based filtering
   # Each user gets access to specific subscriptions by name
   users:
     - username: "alice"
       password: "alice-strong-password"
-      subscriptions: ["main-provider"]  # Alice can only access main-provider subscription
-    
+      subscriptions: ["main-provider"] # Alice can only access main-provider subscription
+
     - username: "bob"
       password: "bob-strong-password"
-      subscriptions: ["secondary-provider"]  # Bob can only access secondary-provider subscription
-    
+      subscriptions: ["secondary-provider"] # Bob can only access secondary-provider subscription
+
     # User with full access (empty subscriptions = all subscriptions)
     - username: "admin"
       password: "admin-strong-password"
-      subscriptions: []  # Access to none (empty list means no permissions)
+      subscriptions: [] # Access to none (empty list means no permissions)
     # Unset subscriptions means access to all (includes "direct" when enabled)
     # To grant direct only: subscriptions: ["direct"]
   # Note: local_only nodes are hidden for all HTTP users.
-  
+
   # Optional: Rename nodes in subscription output (applied after process rules)
   rename:
     "(?i)united states": "US"
     "(?i)hong kong": "HK"
     "(?i)singapore": "SG"
-    "^(.*?)\\s+-\\s+.*$": "$1"  # Remove suffix after " - "
-  
+    "^(.*?)\\s+-\\s+.*$": "$1" # Remove suffix after " - "
+
   # Optional: HTTPS for HTTP subscription server
   # tls:
   #   certificate_path: "/path/to/http-cert.pem"
@@ -137,14 +137,14 @@ http:
 # Hysteria2 inbound configuration
 hysteria2:
   listen: "::"
-  port: 443  # Single listen port
+  port: 443 # Single listen port
   up_mbps: 200
   down_mbps: 200
-  
+
   # Public server information (used in share links)
   public:
     # Server address for share links (optional if using ACME - will use first domain)
-    server: "relay.example.com"  # Your public domain or IP (can omit if using ACME)
+    server: "relay.example.com" # Your public domain or IP (can omit if using ACME)
     # Optional: override SNI used in share links
     # sni: "sni.example.com"
     # Use either 'port' for single port or 'ports' for multiple/ranges
@@ -152,32 +152,32 @@ hysteria2:
     # Port ranges use colon format (from:to) for sing-box compatibility
     # Example: ["443", "8443", "10000:10010"]
     # In hysteria2:// links, ranges are automatically converted to hyphen format (from-to)
-    ports: ["443", "8443", "10000:10010"]  # Supports single ports and ranges
-  
+    ports: ["443", "8443", "10000:10010"] # Supports single ports and ranges
+
   # TLS configuration - choose ACME or manual
   tls:
     # Option 1: ACME automatic certificates (recommended)
     acme:
       domain: ["relay.example.com"]
       email: "admin@example.com"
-      provider: "letsencrypt"  # or "zerossl"
-      data_directory: "./data/acme"  # Certificate storage
+      provider: "letsencrypt" # or "zerossl"
+      data_directory: "./data/acme" # Certificate storage
       # Disable HTTP-01 or TLS-ALPN-01 challenges when needed
       # disable_http_challenge: false
       # disable_tls_alpn_challenge: false
-      
+
       # Optional: DNS-01 challenge (for wildcard certs or when port 80/443 unavailable)
       # dns01_challenge:
       #   provider: "cloudflare"
       #   api_token: "${CLOUDFLARE_API_TOKEN}"
       #   zone_token: "${CLOUDFLARE_ZONE_TOKEN}"
-      
+
       # For Alibaba Cloud DNS:
       # dns01_challenge:
       #   provider: "alidns"
       #   access_key: "${ALIDNS_ACCESS_KEY}"
       #   secret_key: "${ALIDNS_SECRET_KEY}"
-    
+
     # Option 2: Manual certificates
     # certificate_path: "/path/to/cert.pem"
     # key_path: "/path/to/key.pem"
@@ -192,11 +192,11 @@ hysteria2:
     #   -----END PRIVATE KEY-----
   # Optional: ALPN list for Hysteria2 inbound
   # alpn: ["h3", "h3-29"]
-  
+
   # Optional: Obfuscation (salamander)
   obfs:
     type: "salamander"
-    password: "your-strong-obfs-password-here"  # Change this!
+    password: "your-strong-obfs-password-here" # Change this!
 
 ---
 # Advanced configuration example with all features
@@ -211,22 +211,22 @@ subscriptions:
     process:
       # Keep only specific protocols
       - filter_type: ["hysteria2", "vmess", "trojan"]
-      
+
       # Remove test/trial nodes
       - filter: [".*(?i)(trial|test|测试).*"]
         remove: true
-      
+
       # Mark management nodes as local-only
       - filter: [".*(?i)(admin|管理|internal).*"]
         local_only: true
-      
+
       # Standardize naming
       - remove_emoji: true
         rename:
           "^🇺🇸": "US"
           "^🇯🇵": "JP"
           "^🇭🇰": "HK"
-  
+
   - name: "provider-b"
     url: "https://provider-b.com/sub"
     process:
@@ -239,22 +239,22 @@ reload_interval: "0"
 http:
   listen: "0.0.0.0"
   port: 8080
-  
+
   # Multi-user with different access levels
   users:
     - username: "vip"
       password: "vip-password"
-      subscriptions: []  # Full access to all subscriptions
-    
+      subscriptions: [] # Full access to all subscriptions
+
     - username: "basic"
       password: "basic-password"
-      subscriptions: ["provider-a"]  # Only access provider-a
-  
+      subscriptions: ["provider-a"] # Only access provider-a
+
   # Rename in subscription output
   rename:
     "United States": "US"
     "Hong Kong": "HK"
-  
+
   # HTTPS for subscription server
   tls:
     certificate_path: "/etc/ssl/certs/http.pem"
@@ -265,11 +265,11 @@ hysteria2:
   port: 443
   up_mbps: 500
   down_mbps: 500
-  
+
   public:
     server: "relay.example.com"
-    ports: ["443", "8443"]  # Multiple ports
-  
+    ports: ["443", "8443"] # Multiple ports
+
   tls:
     acme:
       domain: ["relay.example.com"]
@@ -279,7 +279,7 @@ hysteria2:
       # disable_http_challenge: false
       # disable_tls_alpn_challenge: false
   # alpn: ["h3", "h3-29"]
-  
+
   obfs:
     type: "salamander"
     password: "obfs-secret-password"
@@ -305,11 +305,11 @@ hysteria2:
   port: 443
   up_mbps: 100
   down_mbps: 100
-  
+
   public:
     server: "your-server.com"
-    port: 443  # Single port (will be used if ports not specified)
-  
+    port: 443 # Single port (will be used if ports not specified)
+
   tls:
     acme:
       domain: ["your-server.com"]
