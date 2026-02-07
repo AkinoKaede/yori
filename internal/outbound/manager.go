@@ -25,11 +25,12 @@ import (
 
 // Manager provides hot-reloadable outbound management.
 type Manager struct {
-	ctx      context.Context
-	logger   log.ContextLogger
-	registry *outbound.Registry
-	connMgr  *route.ConnectionManager
-	dnsMgr   *dns.TransportManager
+	ctx       context.Context
+	logger    log.ContextLogger
+	registry  *outbound.Registry
+	connMgr   *route.ConnectionManager
+	dnsMgr    *dns.TransportManager
+	dnsRouter adapter.DNSRouter
 
 	mu        sync.RWMutex
 	outbounds map[string]adapter.Outbound
@@ -93,7 +94,11 @@ func NewManager(ctx context.Context, logger log.ContextLogger, connMgr *route.Co
 
 func (m *Manager) withDNSManager(ctx context.Context) context.Context {
 	if m.dnsMgr != nil {
-		return service.ContextWith[adapter.DNSTransportManager](ctx, m.dnsMgr)
+		ctx = service.ContextWith[adapter.DNSTransportManager](ctx, m.dnsMgr)
+		if m.dnsRouter != nil {
+			ctx = service.ContextWith[adapter.DNSRouter](ctx, m.dnsRouter)
+		}
+		return ctx
 	}
 	if service.FromContext[adapter.InboundManager](ctx) == nil {
 		ctx = service.ContextWith[adapter.InboundManager](ctx, &noopInboundManager{})
@@ -109,7 +114,21 @@ func (m *Manager) withDNSManager(ctx context.Context) context.Context {
 		}
 	}
 	m.dnsMgr = manager
-	return service.ContextWith[adapter.DNSTransportManager](ctx, manager)
+	ctx = service.ContextWith[adapter.DNSTransportManager](ctx, manager)
+
+	router := dns.NewRouter(ctx, log.NewNOPFactory(), option.DNSOptions{})
+	if err := router.Initialize(nil); err != nil {
+		m.logger.Warn("init dns router: ", err)
+	}
+	for _, stage := range adapter.ListStartStages {
+		if err := adapter.LegacyStart(router, stage); err != nil {
+			m.logger.Warn("start dns router: ", err)
+			break
+		}
+	}
+	m.dnsRouter = router
+	ctx = service.ContextWith[adapter.DNSRouter](ctx, router)
+	return ctx
 }
 
 // Start is a no-op for the custom manager.
@@ -175,17 +194,24 @@ func (m *Manager) Close() error {
 		toClose = append(toClose, ob)
 	}
 	dnsMgr := m.dnsMgr
+	dnsRouter := m.dnsRouter
 	m.outbounds = make(map[string]adapter.Outbound)
 	m.ordered = nil
 	m.hashes = make(map[string]string)
 	m.tracked = make(map[adapter.Outbound]*trackedOutbound)
 	m.dnsMgr = nil
+	m.dnsRouter = nil
 	m.mu.Unlock()
 
 	var err error
 	if dnsMgr != nil {
 		err = E.Append(err, dnsMgr.Close(), func(err error) error {
 			return E.Cause(err, "close dns manager")
+		})
+	}
+	if dnsRouter != nil {
+		err = E.Append(err, dnsRouter.Close(), func(err error) error {
+			return E.Cause(err, "close dns router")
 		})
 	}
 	for _, ob := range toClose {
