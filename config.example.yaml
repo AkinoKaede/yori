@@ -81,8 +81,9 @@ subscriptions:
         remove: true
 
 # Global reload interval (subscriptions will be updated every reload)
+# Set to 0 or omit to disable auto reload
 # Send SIGHUP signal to trigger manual reload
-reload_interval: "30m"
+reload_interval: "0"
 
 # HTTP subscription server configuration
 http:
@@ -202,7 +203,7 @@ subscriptions:
       - filter: [".*CN.*", ".*CHN.*", ".*中国.*"]
         invert: true
 
-reload_interval: "30m"
+reload_interval: "0"
 
 http:
   listen: "0.0.0.0"
@@ -259,7 +260,7 @@ subscriptions:
   - name: "simple"
     url: "https://example.com/sub"
 
-reload_interval: "30m"
+reload_interval: "0"
 
 http:
   listen: "0.0.0.0"

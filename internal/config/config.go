@@ -179,10 +179,7 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// Default reload interval
-	if c.ReloadInterval == 0 {
-		c.ReloadInterval = Duration(30 * time.Minute)
-	}
+	// Reload interval defaults to disabled (0)
 
 	// Validate HTTP config
 	if c.HTTP.Listen == "" {

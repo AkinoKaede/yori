@@ -152,6 +152,10 @@ func reload(
 
 // setupReloadTimer creates a ticker for periodic reloads
 func setupReloadTimer(interval time.Duration, reloadChan chan<- struct{}, log log.ContextLogger) {
+	if interval <= 0 {
+		log.Info("Reload timer disabled")
+		return
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
