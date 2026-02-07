@@ -5,9 +5,11 @@ package engine
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/AkinoKaede/proxy-relay/internal/config"
@@ -195,6 +197,8 @@ func (e *Engine) DispatchConnection(ctx context.Context, conn net.Conn, metadata
 		return
 	}
 	metadata.Outbound = outboundHandler.Tag()
+	httpUser := resolveHTTPUser(user)
+	e.logger.InfoContext(ctx, "inbound connection user=", httpUser, " outbound=", metadata.Outbound, " target=", metadata.Destination)
 	e.connMgr.NewConnection(ctx, outboundHandler, conn, metadata, wrappedOnClose)
 }
 
@@ -208,7 +212,21 @@ func (e *Engine) DispatchPacketConnection(ctx context.Context, conn N.PacketConn
 		return
 	}
 	metadata.Outbound = outboundHandler.Tag()
+	httpUser := resolveHTTPUser(user)
+	e.logger.InfoContext(ctx, "inbound packet user=", httpUser, " outbound=", metadata.Outbound, " target=", metadata.Destination)
 	e.connMgr.NewPacketConnection(ctx, outboundHandler, conn, metadata, wrappedOnClose)
+}
+
+func resolveHTTPUser(user inbound.User) string {
+	decoded, err := base64.StdEncoding.DecodeString(user.Name)
+	if err != nil {
+		return user.Name
+	}
+	parts := strings.SplitN(string(decoded), ":", 2)
+	if len(parts) != 2 || parts[0] == "" {
+		return user.Name
+	}
+	return parts[0]
 }
 
 func (e *Engine) startHTTPServer(users []inbound.User, httpUserMapping map[string][]string) (*server.Server, error) {
