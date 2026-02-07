@@ -79,13 +79,14 @@ type HTTPUser struct {
 
 // Hysteria2Config for Hysteria2 inbound configuration
 type Hysteria2Config struct {
-	Listen   string         `yaml:"listen"`
-	Port     uint16         `yaml:"port"`
-	UpMbps   int            `yaml:"up_mbps"`
-	DownMbps int            `yaml:"down_mbps"`
-	Public   PublicConfig   `yaml:"public"`
-	TLS      TLSConfig      `yaml:"tls"`
-	Obfs     *Hysteria2Obfs `yaml:"obfs"`
+	Listen                string         `yaml:"listen"`
+	Port                  uint16         `yaml:"port"`
+	UpMbps                int            `yaml:"up_mbps"`
+	DownMbps              int            `yaml:"down_mbps"`
+	IgnoreClientBandwidth bool           `yaml:"ignore_client_bandwidth"`
+	Public                PublicConfig   `yaml:"public"`
+	TLS                   TLSConfig      `yaml:"tls"`
+	Obfs                  *Hysteria2Obfs `yaml:"obfs"`
 }
 
 // PublicConfig for public-facing server information

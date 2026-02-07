@@ -156,6 +156,12 @@ hysteria2:
   port: 443 # Single listen port
   up_mbps: 200
   down_mbps: 200
+  # When up_mbps/down_mbps are NOT set:
+  #   ignore_client_bandwidth: true  -> tell clients to use BBR instead of Hysteria CC (Brutal)
+  # When up_mbps/down_mbps ARE set:
+  #   ignore_client_bandwidth: true  -> deny clients from using BBR, force Brutal
+  # Default: false
+  # ignore_client_bandwidth: false
 
   # Public server information (used in share links)
   public:

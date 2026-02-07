@@ -113,7 +113,7 @@ func NewHysteria2Inbound(ctx context.Context, logger log.ContextLogger, cfg conf
 		ReceiveBPS:            uint64(cfg.DownMbps * hysteria.MbpsToBps),
 		SalamanderPassword:    salamanderPassword,
 		TLSConfig:             tlsConfig,
-		IgnoreClientBandwidth: options.IgnoreClientBandwidth,
+		IgnoreClientBandwidth: cfg.IgnoreClientBandwidth,
 		UDPTimeout:            defaultUDPTimeout(options.ListenOptions),
 		Handler:               inbound,
 	})
