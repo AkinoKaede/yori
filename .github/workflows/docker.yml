@@ -16,6 +16,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
     strategy:
       fail-fast: true
@@ -93,6 +94,7 @@ jobs:
   build_grpc:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
     strategy:
       fail-fast: true
@@ -171,6 +173,7 @@ jobs:
   merge:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
     needs:
       - build
@@ -217,6 +220,7 @@ jobs:
   merge_grpc:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
     needs:
       - build_grpc
