@@ -117,7 +117,8 @@ http:
     # User with full access (empty subscriptions = all subscriptions)
     - username: "admin"
       password: "admin-strong-password"
-      subscriptions: []  # Access to all subscriptions (includes "direct" when enabled)
+      subscriptions: []  # Access to none (empty list means no permissions)
+    # Unset subscriptions means access to all (includes "direct" when enabled)
     # To grant direct only: subscriptions: ["direct"]
   # Note: local_only nodes are hidden for all HTTP users.
   

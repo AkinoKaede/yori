@@ -66,15 +66,15 @@ type HTTPConfig struct {
 
 // DirectConfig defines a direct outbound entry exposed as a virtual subscription.
 type DirectConfig struct {
-	Enabled bool     `yaml:"enabled"`
-	Tag     string   `yaml:"tag"`
+	Enabled bool   `yaml:"enabled"`
+	Tag     string `yaml:"tag"`
 }
 
 // HTTPUser for Basic Auth and user filtering
 type HTTPUser struct {
 	Username      string   `yaml:"username"`
 	Password      string   `yaml:"password"`
-	Subscriptions []string `yaml:"subscriptions"` // Subscription names to filter (empty = all subscriptions)
+	Subscriptions []string `yaml:"subscriptions"` // Subscription names to filter (unset = all, empty = none)
 }
 
 // Hysteria2Config for Hysteria2 inbound configuration

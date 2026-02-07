@@ -24,32 +24,22 @@ func GenerateUsers(
 		httpUsers = map[string][]string{"user": nil}
 	}
 
-	userOutbounds := make(map[string][]option.Outbound)
+	users := make([]inbound.User, 0)
+	httpUserToHysteria2Users := make(map[string][]string)
+
 	for username, subscriptionNames := range httpUsers {
 		var outbounds []option.Outbound
-		if len(subscriptionNames) == 0 {
+		if subscriptionNames == nil {
 			for _, subs := range outboundsBySubscription {
 				outbounds = append(outbounds, subs...)
 			}
-		} else {
+		} else if len(subscriptionNames) > 0 {
 			for _, subName := range subscriptionNames {
 				if subs, exists := outboundsBySubscription[subName]; exists {
 					outbounds = append(outbounds, subs...)
 				}
 			}
 		}
-		userOutbounds[username] = outbounds
-	}
-
-	totalCapacity := 0
-	for _, outbounds := range userOutbounds {
-		totalCapacity += len(outbounds)
-	}
-
-	users := make([]inbound.User, 0, totalCapacity)
-	httpUserToHysteria2Users := make(map[string][]string)
-
-	for username, outbounds := range userOutbounds {
 		httpUserToHysteria2Users[username] = make([]string, 0, len(outbounds))
 		for _, outboundConfig := range outbounds {
 			user, hysteria2Username := buildUser(ctx, username, outboundConfig.Tag, dataFile)
