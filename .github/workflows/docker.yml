@@ -10,7 +10,7 @@ on:
         description: "The tag version you want to build"
 
 env:
-  REGISTRY_IMAGE: ghcr.io/${{ toLower(github.repository) }}
+  REGISTRY_IMAGE: ghcr.io/akinokaede/yori
 
 jobs:
   build:
