@@ -24,12 +24,17 @@ import (
 )
 
 var (
-	configPath  string
-	showVersion bool
+	configPath   string
+	showVersion  bool
+	workingDir   string
+	disableColor bool
 )
 
 func init() {
 	flag.StringVar(&configPath, "c", "config.yaml", "path to configuration file")
+	flag.StringVar(&workingDir, "D", "", "set working directory")
+	flag.StringVar(&workingDir, "directory", "", "set working directory")
+	flag.BoolVar(&disableColor, "disable-color", false, "disable color output")
 	flag.BoolVar(&showVersion, "version", false, "show version")
 }
 
@@ -39,6 +44,11 @@ func main() {
 	if showVersion {
 		printVersion()
 		return
+	}
+
+	if err := applyWorkingDir(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to change directory: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Load configuration first to get log level
@@ -56,8 +66,9 @@ func main() {
 	logFactory, err := log.New(log.Options{
 		Context: context.Background(),
 		Options: option.LogOptions{
-			Level:  logLevel,
-			Output: "stdout",
+			Level:        logLevel,
+			Output:       "stdout",
+			DisableColor: disableColor,
 		},
 	})
 	if err != nil {
@@ -70,6 +81,18 @@ func main() {
 		logger.Error("fatal: ", err)
 		os.Exit(1)
 	}
+}
+
+func applyWorkingDir() error {
+	if workingDir == "" {
+		return nil
+	}
+	if _, err := os.Stat(workingDir); err != nil {
+		if err := os.MkdirAll(workingDir, 0o777); err != nil {
+			return err
+		}
+	}
+	return os.Chdir(workingDir)
 }
 
 func printVersion() {
@@ -173,6 +196,9 @@ func reload(
 	engineInstance *engine.Engine,
 ) error {
 	log.Info("Reloading configuration from file...")
+	if err := applyWorkingDir(); err != nil {
+		log.Error("Failed to change directory: ", err)
+	}
 	newCfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		log.Error("Failed to reload configuration file: ", err)
