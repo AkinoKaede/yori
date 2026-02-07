@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `cmd/relay/` is the main application entry point (`yori`).
+- `cmd/yori/` is the main application entry point (`yori`).
 - `internal/` holds core packages (config, engine, inbound/outbound, subscription, server, utils).
 - `pkg/constant/` exposes shared constants used across packages.
 - `subscription/` contains reusable subscription processing helpers.

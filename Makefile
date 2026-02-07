@@ -7,7 +7,7 @@ VERSION = $(TAG:v%=%)
 
 GO ?= go
 BINARY ?= yori
-CMD ?= ./cmd/relay
+CMD ?= ./cmd/yori
 TAGS ?= with_acme
 LDFLAGS ?=
 

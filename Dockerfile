@@ -15,7 +15,7 @@ RUN set -ex \
     && go build -v -trimpath -tags "${TAGS}" \
         -o /go/bin/yori \
         -ldflags "-X 'github.com/AkinoKaede/yori/pkg/constant.Version=${VERSION}' -s -w -buildid=" \
-        ./cmd/relay
+        ./cmd/yori
 
 FROM --platform=$TARGETPLATFORM alpine AS dist
 LABEL maintainer="AkinoKaede"
