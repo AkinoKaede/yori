@@ -4,6 +4,10 @@ log_level: "info"
 # Cache file for subscription data (improves startup time)
 cache_file: "cache.db"
 
+# Data file for storing generated user passwords (separate from cache)
+# This file persists Hysteria2 user credentials across restarts
+data_file: "data.db"
+
 # Multiple subscription sources with filtering and processing
 subscriptions:
   # Primary subscription with comprehensive filtering
@@ -33,6 +37,26 @@ subscriptions:
           protocol: "smux"
           max_connections: 4
           min_streams: 4
+      
+      # Step 5: Configure dialer options for specific nodes
+      - filter: [".*premium.*"]
+        rewrite_dialer_options:
+          detour: ""
+          bind_interface: ""
+          routing_mark: 0
+          reuse_addr: false
+          tcp_fast_open: true
+          tcp_multi_path: false
+      
+      # Step 6: Use invert to exclude instead of include
+      - filter: [".*CN.*", ".*China.*", ".*中国.*"]
+        invert: true  # Keep everything EXCEPT China nodes
+      
+      # Step 7: Enable uTLS for anti-detection
+      - filter_type: ["trojan", "vmess"]
+        rewrite_utls:
+          enabled: true
+          fingerprint: "chrome"
 
   # Backup subscription from local file
   - name: "backup-local"
@@ -50,6 +74,14 @@ subscriptions:
       - filter: [".*(?i)(hong kong|singapore|香港|新加坡).*"]
       # Remove emojis
       - remove_emoji: true
+      
+      # Mark internal/management nodes as local-only (won't be shared via HTTP subscription)
+      - filter: [".*(?i)(internal|管理|monitor|监控).*"]
+        local_only: true
+      
+      # Remove expired or bad nodes completely
+      - filter: [".*(?i)(expired|过期|维护中).*"]
+        remove: true
 
 # Global reload interval (will use minimum of subscription intervals)
 reload_interval: "30m"
@@ -58,6 +90,34 @@ reload_interval: "30m"
 http:
   listen: "0.0.0.0"
   port: 8080
+  
+  # Optional: Multi-user authentication with pattern-based filtering
+  # Each user gets different Hysteria2 credentials mapped to their username
+  users:
+    - username: "alice"
+      password: "alice-strong-password"
+      pattern: [".*US.*", ".*JP.*"]  # Alice can only access US and JP nodes
+    
+    - username: "bob"
+      password: "bob-strong-password"
+      pattern: [".*HK.*", ".*SG.*"]  # Bob can only access HK and SG nodes
+    
+    # User with full access (empty pattern = match all)
+    - username: "admin"
+      password: "admin-strong-password"
+      pattern: []
+  
+  # Optional: Rename nodes in subscription output (applied after process rules)
+  rename:
+    "(?i)united states": "US"
+    "(?i)hong kong": "HK"
+    "(?i)singapore": "SG"
+    "^(.*?)\\s+-\\s+.*$": "$1"  # Remove suffix after " - "
+  
+  # Optional: HTTPS for HTTP subscription server
+  # tls:
+  #   certificate_path: "/path/to/http-cert.pem"
+  #   key_path: "/path/to/http-key.pem"
 
 # Hysteria2 inbound configuration
 hysteria2:
@@ -101,7 +161,96 @@ hysteria2:
     password: "your-strong-obfs-password-here"  # Change this!
 
 ---
+# Advanced configuration example with all features
+log_level: "debug"
+cache_file: "cache.db"
+data_file: "data.db"
+
+subscriptions:
+  - name: "provider-a"
+    url: "https://provider-a.com/sub"
+    user_agent: "clash-verge/1.0"
+    update_interval: "1h"
+    process:
+      # Keep only specific protocols
+      - filter_type: ["hysteria2", "vmess", "trojan"]
+      
+      # Remove test/trial nodes
+      - filter: [".*(?i)(trial|test|测试).*"]
+        remove: true
+      
+      # Mark management nodes as local-only
+      - filter: [".*(?i)(admin|管理|internal).*"]
+        local_only: true
+      
+      # Standardize naming
+      - remove_emoji: true
+        rename:
+          "^🇺🇸": "US"
+          "^🇯🇵": "JP"
+          "^🇭🇰": "HK"
+  
+  - name: "provider-b"
+    url: "https://provider-b.com/sub"
+    update_interval: "2h"
+    process:
+      # Keep everything EXCEPT China nodes (using invert)
+      - filter: [".*CN.*", ".*CHN.*", ".*中国.*"]
+        invert: true
+
+reload_interval: "30m"
+
+http:
+  listen: "0.0.0.0"
+  port: 8080
+  
+  # Multi-user with different access levels
+  users:
+    - username: "vip"
+      password: "vip-password"
+      pattern: []  # Full access
+    
+    - username: "basic"
+      password: "basic-password"
+      pattern: [".*(?i)(us|jp|hk).*"]  # Limited access
+  
+  # Rename in subscription output
+  rename:
+    "United States": "US"
+    "Hong Kong": "HK"
+  
+  # HTTPS for subscription server
+  tls:
+    certificate_path: "/etc/ssl/certs/http.pem"
+    key_path: "/etc/ssl/private/http.key"
+
+hysteria2:
+  listen: "::"
+  ports: [443, 8443]
+  up_mbps: 500
+  down_mbps: 500
+  
+  public:
+    server: "relay.example.com"
+    ports: [443]
+  
+  tls:
+    acme:
+      domain: ["relay.example.com"]
+      email: "admin@example.com"
+      provider: "letsencrypt"
+      data_directory: "./acme"
+  
+  obfs:
+    type: "salamander"
+    password: "obfs-secret-password"
+
+---
 # Minimal configuration example
+log_level: "info"
+cache_file: "cache.db"
+data_file: "data.db"
+
 subscriptions:
   - name: "simple"
     url: "https://example.com/sub"
