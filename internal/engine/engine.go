@@ -185,7 +185,7 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 
 // DispatchConnection routes inbound TCP connections to the target outbound.
 func (e *Engine) DispatchConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, user inbound.User, onClose N.CloseHandlerFunc) {
-	outboundHandler, ok := e.outbound.Outbound(user.Outbound)
+	outboundHandler, wrappedOnClose, ok := e.outbound.Acquire(user.Outbound, onClose)
 	if !ok {
 		err := E.New("outbound not found: ", user.Outbound)
 		N.CloseOnHandshakeFailure(conn, onClose, err)
@@ -193,12 +193,12 @@ func (e *Engine) DispatchConnection(ctx context.Context, conn net.Conn, metadata
 		return
 	}
 	metadata.Outbound = outboundHandler.Tag()
-	e.connMgr.NewConnection(ctx, outboundHandler, conn, metadata, onClose)
+	e.connMgr.NewConnection(ctx, outboundHandler, conn, metadata, wrappedOnClose)
 }
 
 // DispatchPacketConnection routes inbound UDP connections to the target outbound.
 func (e *Engine) DispatchPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext, user inbound.User, onClose N.CloseHandlerFunc) {
-	outboundHandler, ok := e.outbound.Outbound(user.Outbound)
+	outboundHandler, wrappedOnClose, ok := e.outbound.Acquire(user.Outbound, onClose)
 	if !ok {
 		err := E.New("outbound not found: ", user.Outbound)
 		N.CloseOnHandshakeFailure(conn, onClose, err)
@@ -206,7 +206,7 @@ func (e *Engine) DispatchPacketConnection(ctx context.Context, conn N.PacketConn
 		return
 	}
 	metadata.Outbound = outboundHandler.Tag()
-	e.connMgr.NewPacketConnection(ctx, outboundHandler, conn, metadata, onClose)
+	e.connMgr.NewPacketConnection(ctx, outboundHandler, conn, metadata, wrappedOnClose)
 }
 
 func (e *Engine) startHTTPServer(users []inbound.User, httpUserMapping map[string][]string) (*server.Server, error) {
