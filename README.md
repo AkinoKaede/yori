@@ -39,11 +39,11 @@ A Hysteria2-based relay proxy that dynamically fetches outbounds from multiple s
 └────────┬────────┘
          │
          ▼
-┌─────────────────┐     ┌──────────────┐
-│   sing-box      │────▶│ HTTP Server  │
-│ (Hysteria2 In)  │     │ /sub/base64  │
-│ (Multi Outbound)│     │ /sub/singbox │
-└─────────────────┘     └──────────────┘
+┌──────────────────────────────┐     ┌──────────────┐
+│          yori engine         │────▶│ HTTP Server  │
+│ • inbound (hysteria2)        │     │ /sub/base64  │
+│ • outbound manager + routing │     │ /sub/sing-box│
+└──────────────────────────────┘     └──────────────┘
 ```
 
 ## Installation
@@ -51,18 +51,10 @@ A Hysteria2-based relay proxy that dynamically fetches outbounds from multiple s
 ### Build from Source
 
 ```bash
-cd proxy-relay
+cd yori
 make build
-
-# If your repo folder is named yori instead:
-# cd yori
 ```
 
-### Download Binary
-
-```bash
-# TODO: Add release binaries
-```
 
 ## Configuration
 
@@ -251,7 +243,7 @@ Import this URL directly into compatible clients (ShadowRocket, Clash, etc.)
 ### sing-box Format
 
 ```bash
-curl http://your-server:8080/sub/singbox
+curl http://your-server:8080/sub/sing-box
 ```
 
 Returns JSON configuration:

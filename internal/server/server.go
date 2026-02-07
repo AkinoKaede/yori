@@ -454,8 +454,8 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
         
         <div class="endpoint">
             <div class="endpoint-title">SingBox Subscription</div>
-            <div class="endpoint-url">/sub/singbox</div>
-            <p>Returns JSON format with outbounds array for sing-box</p>
+			<div class="endpoint-url">/sub/sing-box</div>
+			<p>Returns JSON format with outbounds array for sing-box (compatible: /sub/singbox)</p>
         </div>
     </div>
 </body>
