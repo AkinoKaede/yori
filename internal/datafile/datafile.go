@@ -11,6 +11,7 @@ import (
 
 	E "github.com/sagernet/sing/common/exceptions"
 	"go.etcd.io/bbolt"
+	bboltErrors "go.etcd.io/bbolt/errors"
 )
 
 const bucketPassword = "password"
@@ -48,7 +49,7 @@ func (d *DataFile) Start() error {
 		if err == nil {
 			break
 		}
-		if errors.Is(err, bbolt.ErrTimeout) {
+		if errors.Is(err, bboltErrors.ErrTimeout) {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
