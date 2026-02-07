@@ -1,0 +1,406 @@
+# Proxy Relay
+
+A Hysteria2-based relay proxy that dynamically fetches outbounds from multiple subscription sources, generates stable user credentials, and provides HTTP subscription endpoints.
+
+## Features
+
+- 🔄 **Multi-Subscription Support**: Fetch from multiple subscription sources (HTTP URLs or local files)
+- 🎯 **Advanced Filtering**: Regex-based filtering, type filtering, exclusions with inversion support
+- ✏️ **Flexible Rewriting**: Rename nodes with regex capture groups, remove emojis, rewrite multiplex/dialer/TLS configs
+- 🔐 **Automatic TLS**: ACME support (Let's Encrypt, ZeroSSL) with DNS-01 challenge for wildcard certificates
+- 🎭 **Obfuscation**: Hysteria2 salamander obfuscation support
+- 🔌 **Multi-Port Inbound**: Listen on multiple ports with single configuration
+- 📡 **HTTP Subscriptions**: Provide base64 and sing-box format subscriptions to downstream clients
+- ♻️ **Hot Reload**: Automatic scheduled reload + manual reload via SIGHUP signal
+- 🧭 **User-Based Routing**: Each outbound gets a unique user with stable credentials (hash-based)
+
+## Architecture
+
+```
+┌─────────────────┐
+│  Subscriptions  │
+│  (HTTP/File)    │
+└────────┬────────┘
+         │ Fetch
+         ▼
+┌─────────────────┐
+│Process Pipeline │
+│ • Filter        │
+│ • Rename        │
+│ • Rewrite       │
+└────────┬────────┘
+         │ Merge
+         ▼
+┌─────────────────┐
+│ User Generation │
+│ (Stable Hash)   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐     ┌──────────────┐
+│   sing-box      │────▶│ HTTP Server  │
+│ (Hysteria2 In)  │     │ /sub/base64  │
+│ (Multi Outbound)│     │ /sub/singbox │
+└─────────────────┘     └──────────────┘
+```
+
+## Installation
+
+### Build from Source
+
+```bash
+cd proxy-relay
+go build -o relay ./cmd/relay
+```
+
+### Download Binary
+
+```bash
+# TODO: Add release binaries
+```
+
+## Configuration
+
+Create a `config.yaml` file (see [config.example.yaml](config.example.yaml) for full examples):
+
+```yaml
+subscriptions:
+  - name: "provider-1"
+    url: "https://example.com/sub?token=xxx"
+    update_interval: "1h"
+    process:
+      - filter_type: ["shadowsocks", "vmess"]
+      - remove_emoji: true
+
+reload_interval: "30m"
+
+http:
+  listen: "0.0.0.0"
+  port: 8080
+
+hysteria2:
+  listen: "::"
+  ports: [443]
+  up_mbps: 200
+  down_mbps: 200
+  
+  public:
+    server: "relay.example.com"
+    ports: [443]
+  
+  tls:
+    acme:
+      domain: ["relay.example.com"]
+      email: "admin@example.com"
+  
+  obfs:
+    type: "salamander"
+    password: "change-this"
+```
+
+### Configuration Sections
+
+#### Subscriptions
+
+Each subscription supports:
+
+- **`url`**: HTTP(S) URL or `file://` path or relative path
+- **`user_agent`**: Custom User-Agent header (optional)
+- **`update_interval`**: How often to fetch updates (e.g., `30m`, `1h`, `24h`)
+- **`process`**: Array of processing steps applied in order
+
+#### Process Pipeline
+
+Each process step can include:
+
+- **`filter`**: Array of regex patterns to match node names/tags
+- **`exclude`**: Array of regex patterns to exclude
+- **`filter_type`**: Array of protocol types (`shadowsocks`, `vmess`, `trojan`, `hysteria2`, etc.)
+- **`exclude_type`**: Array of protocol types to exclude
+- **`invert`**: Invert the match result (boolean)
+- **`remove`**: Remove matched nodes instead of processing (boolean)
+- **`rename`**: Map of regex patterns to replacements (supports `$1`, `$2` capture groups)
+- **`remove_emoji`**: Strip emoji characters (boolean)
+- **`rewrite_multiplex`**: Rewrite multiplex configuration (object)
+- **`rewrite_dialer_options`**: Rewrite dialer options (object)
+- **`rewrite_packet_encoding`**: Rewrite packet encoding (string)
+- **`rewrite_utls`**: Rewrite uTLS configuration (object)
+
+#### TLS Configuration
+
+**ACME (Automatic):**
+
+```yaml
+tls:
+  acme:
+    domain: ["example.com", "*.example.com"]
+    email: "admin@example.com"
+    provider: "letsencrypt"  # or "zerossl"
+    data_directory: "./data/acme"
+    
+    # Optional: DNS-01 challenge
+    dns01_challenge:
+      provider: "cloudflare"  # or "alidns"
+      api_token: "${CLOUDFLARE_API_TOKEN}"
+```
+
+**Manual Certificates:**
+
+```yaml
+tls:
+  certificate_path: "/path/to/cert.pem"
+  key_path: "/path/to/key.pem"
+```
+
+#### Multi-Port Setup
+
+```yaml
+hysteria2:
+  ports: [443, 8443, 10443]  # Listen on multiple ports
+  
+  public:
+    ports: [443]  # Only expose :443 in subscriptions
+```
+
+This allows you to:
+- Load balance across ports
+- Provide different ports for different networks
+- Hide internal ports from public subscriptions
+
+## Usage
+
+### Start the Service
+
+```bash
+./relay -c config.yaml
+```
+
+### Reload Configuration
+
+**Manual reload:**
+
+```bash
+# Find the process ID
+pidof relay
+
+# Send SIGHUP signal
+kill -HUP <pid>
+```
+
+**Automatic reload:**
+
+The service automatically reloads based on `reload_interval` and individual subscription `update_interval` settings.
+
+### Systemd Service
+
+Create `/etc/systemd/system/proxy-relay.service`:
+
+```ini
+[Unit]
+Description=Proxy Relay Service
+After=network.target
+
+[Service]
+Type=simple
+User=nobody
+ExecStart=/usr/local/bin/relay -c /etc/proxy-relay/config.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now proxy-relay
+sudo systemctl status proxy-relay
+```
+
+Reload configuration:
+
+```bash
+sudo systemctl reload proxy-relay
+```
+
+## Subscription Endpoints
+
+### Base64 Format
+
+```bash
+curl http://your-server:8080/sub/base64
+```
+
+Returns base64-encoded `hysteria2://` share links:
+
+```
+hysteria2://user1:pass1@relay.example.com:443?sni=relay.example.com&alpn=h3&obfs=salamander&obfs-password=xxx#user1
+hysteria2://user2:pass2@relay.example.com:443?sni=relay.example.com&alpn=h3&obfs=salamander&obfs-password=xxx#user2
+```
+
+Import this URL directly into compatible clients (ShadowRocket, Clash, etc.)
+
+### sing-box Format
+
+```bash
+curl http://your-server:8080/sub/singbox
+```
+
+Returns JSON configuration:
+
+```json
+{
+  "outbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "user1",
+      "server": "relay.example.com",
+      "server_port": 443,
+      "password": "generated-password",
+      "tls": {
+        "enabled": true,
+        "server_name": "relay.example.com"
+      },
+      "obfs": {
+        "type": "salamander",
+        "password": "xxx"
+      }
+    }
+  ]
+}
+```
+
+## User Generation
+
+Each outbound from subscriptions generates one Hysteria2 user:
+
+- **Username**: Outbound `tag` (after processing/renaming)
+- **Password**: `SHA256(tag + salt)[:32]` - stable across reloads if tag unchanged
+- **Routing**: Traffic from each user routes exclusively to their designated outbound
+
+## Process Pipeline Examples
+
+### Remove Expired Nodes
+
+```yaml
+process:
+  - exclude: [".*(?i)(expired|过期).*"]
+```
+
+### Keep Only Specific Regions
+
+```yaml
+process:
+  - filter: [".*(?i)(hong kong|japan|singapore).*"]
+```
+
+### Standardize Node Names
+
+```yaml
+process:
+  - remove_emoji: true
+    rename:
+      "^🇺🇸\\s*(.*)$": "US-$1"
+      "^🇯🇵\\s*(.*)$": "JP-$1"
+      "^\\[Premium\\]\\s*(.*)$": "$1"
+```
+
+### Enable Multiplex for All Nodes
+
+```yaml
+process:
+  - filter_type: ["shadowsocks", "vmess", "trojan"]
+    rewrite_multiplex:
+      enabled: true
+      protocol: "smux"
+      max_connections: 4
+```
+
+## Troubleshooting
+
+### ACME Certificate Issues
+
+**Port 80/443 unavailable:**
+
+Use DNS-01 challenge:
+
+```yaml
+acme:
+  dns01_challenge:
+    provider: "cloudflare"
+    api_token: "your-token"
+```
+
+**Check certificate status:**
+
+```bash
+ls -lah ./data/acme/
+```
+
+### No Outbounds After Filtering
+
+Check logs for filter match counts:
+
+```bash
+# Enable debug logging in code or check info logs
+tail -f /var/log/proxy-relay.log
+```
+
+Verify filter regex:
+
+```bash
+# Test regex online: regex101.com
+```
+
+### Subscription Fetch Failures
+
+**SSL/TLS errors:**
+
+```yaml
+# Add custom User-Agent
+user_agent: "clash/1.0"
+```
+
+**Timeout:**
+
+Increase HTTP client timeout in code or check network connectivity.
+
+### sing-box Start Failures
+
+**Port already in use:**
+
+```bash
+lsof -i :443
+# Kill conflicting process or change port
+```
+
+**Invalid configuration:**
+
+Check sing-box logs for specific errors.
+
+## License
+
+GPL-3.0-only
+
+## Credits
+
+- [sing-box](https://github.com/SagerNet/sing-box) - Universal proxy platform
+- [serenity](https://github.com/SagerNet/serenity) - Subscription service inspiration
+- [Hysteria2](https://v2.hysteria.network/) - Modern proxy protocol
+
+## Contributing
+
+Pull requests welcome! Please ensure:
+
+1. Code follows existing style
+2. All tests pass
+3. Documentation updated
+4. GPL-3.0 license header on new files
+
+## Support
+
+- Issues: [GitHub Issues](https://github.com/AkinoKaede/proxy-relay/issues)
+- Discussions: [GitHub Discussions](https://github.com/AkinoKaede/proxy-relay/discussions)

@@ -1,0 +1,12 @@
+/relay
+
+.DS_Store
+
+.vscode
+.idea
+
+*.log
+*.swp
+*.db
+*.cache
+*.exe

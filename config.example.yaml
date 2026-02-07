@@ -1,0 +1,123 @@
+# Multiple subscription sources with filtering and processing
+subscriptions:
+  # Primary subscription with comprehensive filtering
+  - name: "main-provider"
+    url: "https://example.com/subscription?token=YOUR_TOKEN"
+    user_agent: "clash-verge/1.0"  # Optional: Custom User-Agent
+    update_interval: "1h"           # Update every hour
+    process:
+      # Step 1: Filter by protocol types
+      - filter_type: ["shadowsocks", "vmess", "trojan", "hysteria2"]
+      
+      # Step 2: Exclude nodes with certain keywords
+      - exclude: [".*(?i)(expired|过期|到期).*"]
+      
+      # Step 3: Rename nodes - remove emoji and standardize format
+      - remove_emoji: true
+        rename:
+          "^🇺🇸\\s*(.*)$": "US-$1"
+          "^🇯🇵\\s*(.*)$": "JP-$1"
+          "^🇭🇰\\s*(.*)$": "HK-$1"
+          "^\\[.*?\\]\\s*(.*)$": "$1"  # Remove [tags]
+      
+      # Step 4: Enable multiplex for better performance
+      - filter_type: ["shadowsocks", "vmess", "trojan"]
+        rewrite_multiplex:
+          enabled: true
+          protocol: "smux"
+          max_connections: 4
+          min_streams: 4
+
+  # Backup subscription from local file
+  - name: "backup-local"
+    url: "file://backup-nodes.json"  # Can be relative or absolute path
+    update_interval: "6h"
+    process:
+      - filter: ["backup-.*"]
+
+  # Another provider with different processing
+  - name: "secondary-provider"
+    url: "https://another-provider.com/sub"
+    update_interval: "2h"
+    process:
+      # Only keep Hong Kong and Singapore nodes
+      - filter: [".*(?i)(hong kong|singapore|香港|新加坡).*"]
+      # Remove emojis
+      - remove_emoji: true
+
+# Global reload interval (will use minimum of subscription intervals)
+reload_interval: "30m"
+
+# HTTP subscription server configuration
+http:
+  listen: "0.0.0.0"
+  port: 8080
+
+# Hysteria2 inbound configuration
+hysteria2:
+  listen: "::"
+  ports: [443, 8443, 10443]  # Multiple ports for load balancing
+  up_mbps: 200
+  down_mbps: 200
+  
+  # Public server information (used in share links)
+  public:
+    server: "relay.example.com"  # Your public domain or IP
+    ports: [443]  # Only expose port 443 in subscriptions (subset of listen ports)
+  
+  # TLS configuration - choose ACME or manual
+  tls:
+    # Option 1: ACME automatic certificates (recommended)
+    acme:
+      domain: ["relay.example.com"]
+      email: "admin@example.com"
+      provider: "letsencrypt"  # or "zerossl"
+      data_directory: "./data/acme"  # Certificate storage
+      
+      # Optional: DNS-01 challenge (for wildcard certs or when port 80/443 unavailable)
+      # dns01_challenge:
+      #   provider: "cloudflare"
+      #   api_token: "${CLOUDFLARE_API_TOKEN}"
+      
+      # For Alibaba Cloud DNS:
+      # dns01_challenge:
+      #   provider: "alidns"
+      #   access_key: "${ALIDNS_ACCESS_KEY}"
+      #   secret_key: "${ALIDNS_SECRET_KEY}"
+    
+    # Option 2: Manual certificates
+    # certificate_path: "/path/to/cert.pem"
+    # key_path: "/path/to/key.pem"
+  
+  # Optional: Obfuscation (salamander)
+  obfs:
+    type: "salamander"
+    password: "your-strong-obfs-password-here"  # Change this!
+
+---
+# Minimal configuration example
+subscriptions:
+  - name: "simple"
+    url: "https://example.com/sub"
+    update_interval: "1h"
+
+reload_interval: "30m"
+
+http:
+  listen: "0.0.0.0"
+  port: 8080
+
+hysteria2:
+  listen: "::"
+  ports: [443]
+  up_mbps: 100
+  down_mbps: 100
+  
+  public:
+    server: "your-server.com"
+    ports: [443]
+  
+  tls:
+    acme:
+      domain: ["your-server.com"]
+      email: "you@example.com"
