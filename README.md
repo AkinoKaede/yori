@@ -95,7 +95,10 @@ hysteria2:
 
 Each subscription supports:
 
-- **`url`**: HTTP(S) URL or `file://` path or relative path
+- **`url`**: HTTP(S) URL or `file://` path
+  - Absolute paths: `file:///etc/yori/backup.json` (Linux/macOS) or `file://C:/backup.json` (Windows)
+  - Relative paths: Resolved relative to the **config file directory**
+    - Example: If config is `/etc/yori/config.yaml`, then `file://backup.json` → `/etc/yori/backup.json`
 - **`user_agent`**: Custom User-Agent header (optional)
 - **`update_interval`**: How often to fetch updates (e.g., `30m`, `1h`, `24h`)
 - **`process`**: Array of processing steps applied in order

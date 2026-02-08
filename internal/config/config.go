@@ -5,6 +5,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/sagernet/sing-box/option"
@@ -23,6 +24,9 @@ type Config struct {
 	ReloadInterval        Duration        `yaml:"reload_interval"`
 	HTTP                  HTTPConfig      `yaml:"http"`
 	Hysteria2             Hysteria2Config `yaml:"hysteria2"`
+
+	// BaseDir is the directory containing the config file (used for resolving relative paths)
+	BaseDir string `yaml:"-"`
 }
 
 // Subscription represents a single subscription source
@@ -177,6 +181,13 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, E.Cause(err, "parse config")
 	}
+
+	// Resolve config file's directory for relative path resolution
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, E.Cause(err, "resolve config path")
+	}
+	cfg.BaseDir = filepath.Dir(absPath)
 
 	if err := cfg.Validate(); err != nil {
 		return nil, E.Cause(err, "validate config")

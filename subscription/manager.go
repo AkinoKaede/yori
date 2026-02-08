@@ -33,6 +33,7 @@ type Manager struct {
 	httpClient            *http.Client
 	cacheFile             *cachefile.CacheFile
 	deduplicationStrategy string
+	configBaseDir         string // Directory containing config file (for resolving file:// relative paths)
 	mu                    sync.RWMutex
 }
 
@@ -119,6 +120,7 @@ func NewManager(ctx context.Context, logger logger.Logger, cfg *config.Config) (
 		subscriptions:         subscriptions,
 		cacheFile:             cache,
 		deduplicationStrategy: cfg.DeduplicationStrategy,
+		configBaseDir:         cfg.BaseDir,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -288,10 +290,16 @@ func (m *Manager) fetchFromFile(sub *Subscription) error {
 
 	// Resolve absolute path
 	if !filepath.IsAbs(filePath) {
-		var err error
-		filePath, err = filepath.Abs(filePath)
-		if err != nil {
-			return E.Cause(err, "resolve path")
+		// Relative paths are resolved based on config file directory
+		if m.configBaseDir != "" {
+			filePath = filepath.Join(m.configBaseDir, filePath)
+		} else {
+			// Fallback to current working directory if configBaseDir is not set
+			var err error
+			filePath, err = filepath.Abs(filePath)
+			if err != nil {
+				return E.Cause(err, "resolve path")
+			}
 		}
 	}
 

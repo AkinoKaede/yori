@@ -77,7 +77,11 @@ subscriptions:
 
   # Backup subscription from local file
   - name: "backup-local"
-    url: "file://backup-nodes.json" # Can be relative or absolute path
+    # File paths:
+    #   - Absolute: file:///path/to/backup.json (Linux/macOS) or file://C:/backup.json (Windows)
+    #   - Relative: Resolved relative to config file directory
+    #     If config is /etc/yori/config.yaml, then file://backup.json → /etc/yori/backup.json
+    url: "file://backup-nodes.json"
     process:
       - filter: ["backup-.*"]
 
