@@ -14,14 +14,15 @@ import (
 
 // Config is the main configuration structure
 type Config struct {
-	LogLevel       string          `yaml:"log_level"`
-	CacheFile      string          `yaml:"cache_file"`
-	DataFile       string          `yaml:"data_file"`
-	Subscriptions  []Subscription  `yaml:"subscriptions"`
-	Direct         *DirectConfig   `yaml:"direct"`
-	ReloadInterval Duration        `yaml:"reload_interval"`
-	HTTP           HTTPConfig      `yaml:"http"`
-	Hysteria2      Hysteria2Config `yaml:"hysteria2"`
+	LogLevel              string          `yaml:"log_level"`
+	CacheFile             string          `yaml:"cache_file"`
+	DataFile              string          `yaml:"data_file"`
+	DeduplicationStrategy string          `yaml:"deduplication_strategy"`
+	Subscriptions         []Subscription  `yaml:"subscriptions"`
+	Direct                *DirectConfig   `yaml:"direct"`
+	ReloadInterval        Duration        `yaml:"reload_interval"`
+	HTTP                  HTTPConfig      `yaml:"http"`
+	Hysteria2             Hysteria2Config `yaml:"hysteria2"`
 }
 
 // Subscription represents a single subscription source
@@ -211,6 +212,24 @@ func (c *Config) Validate() error {
 	}
 
 	// Reload interval defaults to disabled (0)
+
+	// Validate deduplication strategy
+	if c.DeduplicationStrategy == "" {
+		c.DeduplicationStrategy = "rename" // Default to rename for backward compatibility
+	} else {
+		// Validate strategy value
+		validStrategies := []string{"rename", "first", "last", "prefer_ipv4", "prefer_ipv6", "prefer_domain_then_ipv4", "prefer_domain_then_ipv6"}
+		valid := false
+		for _, s := range validStrategies {
+			if c.DeduplicationStrategy == s {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return E.New("deduplication_strategy must be one of: rename, first, last, prefer_ipv4, prefer_ipv6, prefer_domain_then_ipv4, prefer_domain_then_ipv6")
+		}
+	}
 
 	// Validate HTTP config
 	if c.HTTP.Listen == "" {

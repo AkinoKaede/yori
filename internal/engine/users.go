@@ -8,17 +8,69 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/AkinoKaede/yori/internal/config"
 	"github.com/AkinoKaede/yori/internal/datafile"
 	"github.com/AkinoKaede/yori/internal/inbound"
 
 	"github.com/sagernet/sing-box/option"
 )
 
+// SubscriptionManager defines the interface for merging outbounds from subscriptions
+type SubscriptionManager interface {
+	MergeBySubscriptionNames(subscriptionNames []string) []option.Outbound
+	GetOutboundsBySubscription() map[string][]option.Outbound
+}
+
+// subscriptionManagerWithDirect wraps a SubscriptionManager and injects direct outbound
+type subscriptionManagerWithDirect struct {
+	manager   SubscriptionManager
+	directCfg *config.DirectConfig
+}
+
+func (s *subscriptionManagerWithDirect) MergeBySubscriptionNames(subscriptionNames []string) []option.Outbound {
+	return s.manager.MergeBySubscriptionNames(subscriptionNames)
+}
+
+func (s *subscriptionManagerWithDirect) GetOutboundsBySubscription() map[string][]option.Outbound {
+	result := s.manager.GetOutboundsBySubscription()
+	return appendDirectSubscriptionMap(result, s.directCfg)
+}
+
+func appendDirectSubscriptionMap(outboundsBySubscription map[string][]option.Outbound, directCfg *config.DirectConfig) map[string][]option.Outbound {
+	if directCfg == nil || !directCfg.Enabled || directCfg.Tag == "" {
+		return outboundsBySubscription
+	}
+
+	// Check if "direct" subscription already exists
+	if _, exists := outboundsBySubscription["direct"]; exists {
+		return outboundsBySubscription
+	}
+
+	// Check if tag already exists in other subscriptions
+	for _, outbounds := range outboundsBySubscription {
+		for _, outbound := range outbounds {
+			if outbound.Tag == directCfg.Tag {
+				return outboundsBySubscription
+			}
+		}
+	}
+
+	// Add direct subscription
+	outboundsBySubscription["direct"] = []option.Outbound{
+		{
+			Type:    "direct",
+			Tag:     directCfg.Tag,
+			Options: &option.DirectOutboundOptions{},
+		},
+	}
+	return outboundsBySubscription
+}
+
 // GenerateUsers creates inbound users and mappings for HTTP subscriptions.
 // Returns: users, httpUserToHysteria2Users mapping, outboundToSubscription mapping
 func GenerateUsers(
 	ctx context.Context,
-	outboundsBySubscription map[string][]option.Outbound,
+	subManager SubscriptionManager,
 	httpUsers map[string][]string,
 	dataFile *datafile.DataFile,
 ) ([]inbound.User, map[string][]string, map[string]string) {
@@ -30,27 +82,26 @@ func GenerateUsers(
 	httpUserToHysteria2Users := make(map[string][]string)
 	outboundToSubscription := make(map[string]string)
 
+	// Build reverse mapping: tag -> subscription name
+	outboundsBySubscription := subManager.GetOutboundsBySubscription()
+	tagToSub := make(map[string]string)
+	for subName, outbounds := range outboundsBySubscription {
+		for _, ob := range outbounds {
+			tagToSub[ob.Tag] = subName
+		}
+	}
+
 	for username, subscriptionNames := range httpUsers {
-		var outbounds []option.Outbound
-		if subscriptionNames == nil {
-			for subName, subs := range outboundsBySubscription {
-				for _, ob := range subs {
-					outbounds = append(outbounds, ob)
-					// Build reverse mapping
-					outboundToSubscription[ob.Tag] = subName
-				}
-			}
-		} else if len(subscriptionNames) > 0 {
-			for _, subName := range subscriptionNames {
-				if subs, exists := outboundsBySubscription[subName]; exists {
-					for _, ob := range subs {
-						outbounds = append(outbounds, ob)
-						// Build reverse mapping
-						outboundToSubscription[ob.Tag] = subName
-					}
-				}
+		// Use Manager's merge method to get deduplicated outbounds
+		outbounds := subManager.MergeBySubscriptionNames(subscriptionNames)
+
+		// Build reverse mapping for this user's outbounds
+		for _, ob := range outbounds {
+			if source, exists := tagToSub[ob.Tag]; exists {
+				outboundToSubscription[ob.Tag] = source
 			}
 		}
+
 		httpUserToHysteria2Users[username] = make([]string, 0, len(outbounds))
 		for _, outboundConfig := range outbounds {
 			user, hysteria2Username := buildUser(ctx, username, outboundConfig.Tag, dataFile)

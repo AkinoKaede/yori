@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,12 +27,13 @@ import (
 
 // Manager manages multiple subscription sources
 type Manager struct {
-	ctx           context.Context
-	logger        logger.Logger
-	subscriptions []*Subscription
-	httpClient    *http.Client
-	cacheFile     *cachefile.CacheFile
-	mu            sync.RWMutex
+	ctx                   context.Context
+	logger                logger.Logger
+	subscriptions         []*Subscription
+	httpClient            *http.Client
+	cacheFile             *cachefile.CacheFile
+	deduplicationStrategy string
+	mu                    sync.RWMutex
 }
 
 // Subscription represents a single subscription with its state
@@ -112,10 +114,11 @@ func NewManager(ctx context.Context, logger logger.Logger, cfg *config.Config) (
 	}
 
 	return &Manager{
-		ctx:           ctx,
-		logger:        logger,
-		subscriptions: subscriptions,
-		cacheFile:     cache,
+		ctx:                   ctx,
+		logger:                logger,
+		subscriptions:         subscriptions,
+		cacheFile:             cache,
+		deduplicationStrategy: cfg.DeduplicationStrategy,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -369,7 +372,7 @@ func (m *Manager) MergeAll() []option.Outbound {
 	}
 
 	// Deduplicate tags to avoid conflicts
-	merged = deduplicateOutboundTags(merged)
+	merged = DeduplicateOutboundTags(merged, m.deduplicationStrategy)
 
 	return merged
 }
@@ -391,7 +394,7 @@ func (m *Manager) MergeAllNonLocal() []option.Outbound {
 	}
 
 	// Deduplicate tags to avoid conflicts
-	merged = deduplicateOutboundTags(merged)
+	merged = DeduplicateOutboundTags(merged, m.deduplicationStrategy)
 
 	return merged
 }
@@ -430,6 +433,13 @@ func (m *Manager) GetOutboundsBySubscription() map[string][]option.Outbound {
 	return result
 }
 
+// GetDeduplicationStrategy returns the configured deduplication strategy
+func (m *Manager) GetDeduplicationStrategy() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.deduplicationStrategy
+}
+
 // MergeBySubscriptionNames merges outbounds from specified subscriptions
 // If subscriptionNames is empty, returns all outbounds
 func (m *Manager) MergeBySubscriptionNames(subscriptionNames []string) []option.Outbound {
@@ -459,7 +469,7 @@ func (m *Manager) MergeBySubscriptionNames(subscriptionNames []string) []option.
 	}
 
 	// Deduplicate tags to avoid conflicts
-	merged = deduplicateOutboundTags(merged)
+	merged = DeduplicateOutboundTags(merged, m.deduplicationStrategy)
 
 	return merged
 }
@@ -479,22 +489,173 @@ func isLocalFile(url string) bool {
 		(!strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://"))
 }
 
-// deduplicateOutboundTags ensures all outbound tags are unique
-func deduplicateOutboundTags(outbounds []option.Outbound) []option.Outbound {
-	seen := make(map[string]int)
-	result := make([]option.Outbound, len(outbounds))
+// getOutboundServer extracts the server address from an outbound configuration
+func getOutboundServer(outbound option.Outbound) string {
+	switch opts := outbound.Options.(type) {
+	case *option.ShadowsocksOutboundOptions:
+		return opts.Server
+	case *option.ShadowsocksROutboundOptions:
+		return opts.Server
+	case *option.VMessOutboundOptions:
+		return opts.Server
+	case *option.VLESSOutboundOptions:
+		return opts.Server
+	case *option.TrojanOutboundOptions:
+		return opts.Server
+	case *option.Hysteria2OutboundOptions:
+		return opts.Server
+	case *option.SOCKSOutboundOptions:
+		return opts.Server
+	case *option.HTTPOutboundOptions:
+		return opts.Server
+	default:
+		return ""
+	}
+}
 
+// getAddressType determines whether an address is a domain, IPv4, or IPv6
+func getAddressType(address string) string {
+	if address == "" {
+		return ""
+	}
+
+	// Try to parse as IP
+	ip := net.ParseIP(address)
+	if ip == nil {
+		// Not an IP, must be a domain
+		return constant.AddressTypeDomain
+	}
+
+	// Check if IPv4 or IPv6
+	if strings.Contains(ip.String(), ":") {
+		return constant.AddressTypeIPv6
+	}
+	return constant.AddressTypeIPv4
+}
+
+// getAddressPriority returns the priority score for an address type based on strategy
+func getAddressPriority(addressType string, strategy string) int {
+	switch strategy {
+	case constant.DeduplicationPreferIPv4:
+		// IPv4 > Domain > IPv6
+		switch addressType {
+		case constant.AddressTypeIPv4:
+			return 3
+		case constant.AddressTypeDomain:
+			return 2
+		case constant.AddressTypeIPv6:
+			return 1
+		}
+	case constant.DeduplicationPreferIPv6:
+		// IPv6 > Domain > IPv4
+		switch addressType {
+		case constant.AddressTypeIPv6:
+			return 3
+		case constant.AddressTypeDomain:
+			return 2
+		case constant.AddressTypeIPv4:
+			return 1
+		}
+	case constant.DeduplicationPreferDomainThenIPv4:
+		// Domain > IPv4 > IPv6
+		switch addressType {
+		case constant.AddressTypeDomain:
+			return 3
+		case constant.AddressTypeIPv4:
+			return 2
+		case constant.AddressTypeIPv6:
+			return 1
+		}
+	case constant.DeduplicationPreferDomainThenIPv6:
+		// Domain > IPv6 > IPv4
+		switch addressType {
+		case constant.AddressTypeDomain:
+			return 3
+		case constant.AddressTypeIPv6:
+			return 2
+		case constant.AddressTypeIPv4:
+			return 1
+		}
+	}
+	return 0
+}
+
+// DeduplicateOutboundTags ensures all outbound tags are unique based on the specified strategy
+func DeduplicateOutboundTags(outbounds []option.Outbound, strategy string) []option.Outbound {
+	if strategy == "" || strategy == constant.DeduplicationRename {
+		// Rename strategy: keep all nodes, append suffix like "node (1)", "node (2)"
+		seen := make(map[string]int)
+		result := make([]option.Outbound, len(outbounds))
+
+		for i, outbound := range outbounds {
+			tag := outbound.Tag
+			if count, exists := seen[tag]; exists {
+				// Tag collision, append number in parentheses
+				count++
+				seen[tag] = count
+				outbound.Tag = fmt.Sprintf("%s (%d)", tag, count)
+			} else {
+				seen[tag] = 0
+			}
+			result[i] = outbound
+		}
+
+		return result
+	}
+
+	// For other strategies: keep only one node per tag
+	seen := make(map[string][]int) // tag -> indices of outbounds with this tag
+
+	// First pass: collect all indices for each tag
 	for i, outbound := range outbounds {
 		tag := outbound.Tag
-		if count, exists := seen[tag]; exists {
-			// Tag collision, append suffix
-			count++
-			seen[tag] = count
-			outbound.Tag = tag + "-" + strings.Repeat("x", count)
-		} else {
-			seen[tag] = 0
+		seen[tag] = append(seen[tag], i)
+	}
+
+	// Second pass: determine which nodes to keep
+	keep := make(map[int]bool)
+	for _, indices := range seen {
+		if len(indices) == 1 {
+			// No duplicates, keep it
+			keep[indices[0]] = true
+			continue
 		}
-		result[i] = outbound
+
+		// Handle duplicates based on strategy
+		var selectedIndex int
+		switch strategy {
+		case constant.DeduplicationFirst:
+			// Keep the first occurrence
+			selectedIndex = indices[0]
+		case constant.DeduplicationLast:
+			// Keep the last occurrence
+			selectedIndex = indices[len(indices)-1]
+		default:
+			// Priority-based strategies
+			selectedIndex = indices[0]
+			bestPriority := -1
+
+			for _, idx := range indices {
+				server := getOutboundServer(outbounds[idx])
+				addressType := getAddressType(server)
+				priority := getAddressPriority(addressType, strategy)
+
+				if priority > bestPriority {
+					bestPriority = priority
+					selectedIndex = idx
+				}
+			}
+		}
+
+		keep[selectedIndex] = true
+	}
+
+	// Build result with only kept nodes
+	result := make([]option.Outbound, 0, len(keep))
+	for i, outbound := range outbounds {
+		if keep[i] {
+			result = append(result, outbound)
+		}
 	}
 
 	return result

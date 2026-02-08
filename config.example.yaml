@@ -8,6 +8,17 @@ cache_file: "cache.db"
 # This file persists Hysteria2 user credentials across restarts
 data_file: "data.db"
 
+# Deduplication strategy for handling nodes with duplicate names
+# Available strategies:
+#   - rename (default): Keep all nodes, append suffix (node (1), node (2), etc.) to duplicates
+#   - first: Keep the first occurrence, discard subsequent duplicates
+#   - last: Keep the last occurrence, discard previous duplicates
+#   - prefer_ipv4: Prefer IPv4 > Domain > IPv6 (keeps only one per name)
+#   - prefer_ipv6: Prefer IPv6 > Domain > IPv4 (keeps only one per name)
+#   - prefer_domain_then_ipv4: Prefer Domain > IPv4 > IPv6 (keeps only one per name)
+#   - prefer_domain_then_ipv6: Prefer Domain > IPv6 > IPv4 (keeps only one per name)
+deduplication_strategy: "rename"
+
 # Multiple subscription sources with filtering and processing
 subscriptions:
   # Primary subscription with comprehensive filtering

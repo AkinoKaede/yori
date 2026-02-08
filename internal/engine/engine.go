@@ -71,14 +71,14 @@ func (e *Engine) Start() error {
 	}
 	e.subManager = subManager
 
-	outboundsBySubscription := appendDirectSubscription(subManager.GetOutboundsBySubscription(), e.cfg.Direct)
 	outbounds := appendDirectOutbound(subManager.MergeAll(), e.cfg.Direct)
 	if len(outbounds) == 0 {
 		return E.New("no outbounds available, check subscription configuration")
 	}
 
 	httpUsers := buildHTTPUserSubscriptions(e.cfg)
-	users, httpUserMapping, outboundToSubscription := GenerateUsers(e.ctx, outboundsBySubscription, httpUsers, e.dataFile)
+	subManagerWithDirect := &subscriptionManagerWithDirect{manager: subManager, directCfg: e.cfg.Direct}
+	users, httpUserMapping, outboundToSubscription := GenerateUsers(e.ctx, subManagerWithDirect, httpUsers, e.dataFile)
 
 	e.connMgr = route.NewConnectionManager(e.logger)
 	e.outbound = outbound.NewManager(e.ctx, e.logger, e.connMgr)
@@ -153,7 +153,6 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 	}
 	e.logger.Debug("subscription fetch completed in ", time.Since(fetchStart))
 
-	outboundsBySubscription := appendDirectSubscription(e.subManager.GetOutboundsBySubscription(), newCfg.Direct)
 	outbounds := appendDirectOutbound(e.subManager.MergeAll(), newCfg.Direct)
 	if len(outbounds) == 0 {
 		return E.New("no outbounds after reload")
@@ -162,7 +161,8 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 
 	userGenStart := time.Now()
 	httpUsers := buildHTTPUserSubscriptions(newCfg)
-	users, httpUserMapping, outboundToSubscription := GenerateUsers(e.ctx, outboundsBySubscription, httpUsers, e.dataFile)
+	subManagerWithDirect := &subscriptionManagerWithDirect{manager: e.subManager, directCfg: newCfg.Direct}
+	users, httpUserMapping, outboundToSubscription := GenerateUsers(e.ctx, subManagerWithDirect, httpUsers, e.dataFile)
 	e.logger.Debug("generated ", len(users), " users in ", time.Since(userGenStart))
 
 	outboundReloadStart := time.Now()
@@ -332,30 +332,6 @@ func appendDirectOutbound(outbounds []option.Outbound, directCfg *config.DirectC
 		Options: &option.DirectOutboundOptions{},
 	}
 	return append([]option.Outbound{directOutbound}, outbounds...)
-}
-
-func appendDirectSubscription(outboundsBySubscription map[string][]option.Outbound, directCfg *config.DirectConfig) map[string][]option.Outbound {
-	if directCfg == nil || !directCfg.Enabled || directCfg.Tag == "" {
-		return outboundsBySubscription
-	}
-	if _, exists := outboundsBySubscription["direct"]; exists {
-		return outboundsBySubscription
-	}
-	for _, outbounds := range outboundsBySubscription {
-		for _, outbound := range outbounds {
-			if outbound.Tag == directCfg.Tag {
-				return outboundsBySubscription
-			}
-		}
-	}
-	outboundsBySubscription["direct"] = []option.Outbound{
-		{
-			Type:    C.TypeDirect,
-			Tag:     directCfg.Tag,
-			Options: &option.DirectOutboundOptions{},
-		},
-	}
-	return outboundsBySubscription
 }
 
 func buildServerConfig(cfg *config.Config) *server.ServerConfig {
