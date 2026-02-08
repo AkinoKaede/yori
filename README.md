@@ -179,7 +179,7 @@ After=network.target
 [Service]
 Type=simple
 User=nobody
-ExecStart=/usr/local/bin/yori -c /etc/yori/config.yaml
+ExecStart=/usr/local/bin/yori -c /usr/local/etc/yori/config.yaml
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s
