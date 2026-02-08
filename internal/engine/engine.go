@@ -78,7 +78,7 @@ func (e *Engine) Start() error {
 	}
 
 	httpUsers := buildHTTPUserSubscriptions(e.cfg)
-	users, httpUserMapping := GenerateUsers(e.ctx, outboundsBySubscription, httpUsers, e.dataFile)
+	users, httpUserMapping, outboundToSubscription := GenerateUsers(e.ctx, outboundsBySubscription, httpUsers, e.dataFile)
 
 	e.connMgr = route.NewConnectionManager(e.logger)
 	e.outbound = outbound.NewManager(e.ctx, e.logger, e.connMgr)
@@ -95,7 +95,7 @@ func (e *Engine) Start() error {
 	}
 	e.inbound = hysteriaInbound
 
-	httpServer, err := e.startHTTPServer(users, httpUserMapping)
+	httpServer, err := e.startHTTPServer(users, httpUserMapping, outboundToSubscription)
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 
 	userGenStart := time.Now()
 	httpUsers := buildHTTPUserSubscriptions(newCfg)
-	users, httpUserMapping := GenerateUsers(e.ctx, outboundsBySubscription, httpUsers, e.dataFile)
+	users, httpUserMapping, outboundToSubscription := GenerateUsers(e.ctx, outboundsBySubscription, httpUsers, e.dataFile)
 	e.logger.Debug("generated ", len(users), " users in ", time.Since(userGenStart))
 
 	outboundReloadStart := time.Now()
@@ -190,7 +190,7 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 		}
 	}
 
-	if err := e.reloadHTTPServer(newCfg, users, httpUserMapping); err != nil {
+	if err := e.reloadHTTPServer(newCfg, users, httpUserMapping, outboundToSubscription); err != nil {
 		return err
 	}
 
@@ -245,7 +245,7 @@ func resolveHTTPUser(user inbound.User) string {
 	return parts[0]
 }
 
-func (e *Engine) startHTTPServer(users []inbound.User, httpUserMapping map[string][]string) (*server.Server, error) {
+func (e *Engine) startHTTPServer(users []inbound.User, httpUserMapping map[string][]string, outboundToSubscription map[string]string) (*server.Server, error) {
 	serverCfg := buildServerConfig(e.cfg)
 	for _, user := range e.cfg.HTTP.Users {
 		serverCfg.Users = append(serverCfg.Users, server.HTTPUser{
@@ -255,7 +255,7 @@ func (e *Engine) startHTTPServer(users []inbound.User, httpUserMapping map[strin
 	}
 
 	httpServer := server.NewServer(e.ctx, e.logger, serverCfg)
-	httpServer.UpdateState(buildServerState(e.cfg, e.subManager, users, httpUserMapping))
+	httpServer.UpdateState(buildServerState(e.cfg, e.subManager, users, httpUserMapping, outboundToSubscription))
 
 	if err := httpServer.Start(); err != nil {
 		return nil, E.Cause(err, "start HTTP server")
@@ -263,7 +263,7 @@ func (e *Engine) startHTTPServer(users []inbound.User, httpUserMapping map[strin
 	return httpServer, nil
 }
 
-func (e *Engine) reloadHTTPServer(newCfg *config.Config, users []inbound.User, httpUserMapping map[string][]string) error {
+func (e *Engine) reloadHTTPServer(newCfg *config.Config, users []inbound.User, httpUserMapping map[string][]string, outboundToSubscription map[string]string) error {
 	if e.httpServer == nil {
 		return nil
 	}
@@ -291,10 +291,20 @@ func (e *Engine) reloadHTTPServer(newCfg *config.Config, users []inbound.User, h
 			})
 		}
 		e.httpServer.UpdateUsers(httpUsers)
-		e.httpServer.UpdateRenamePatterns(newCfg.HTTP.Rename)
+
+		// Convert config.RenameRule to server.RenameRule
+		var renameRules []server.RenameRule
+		for _, rule := range newCfg.HTTP.Rename {
+			renameRules = append(renameRules, server.RenameRule{
+				Pattern:       rule.Pattern,
+				Replace:       rule.Replace,
+				Subscriptions: rule.Subscriptions,
+			})
+		}
+		e.httpServer.UpdateRenamePatterns(renameRules)
 	}
 
-	e.httpServer.UpdateState(buildServerState(newCfg, e.subManager, users, httpUserMapping))
+	e.httpServer.UpdateState(buildServerState(newCfg, e.subManager, users, httpUserMapping, outboundToSubscription))
 	return nil
 }
 
@@ -347,9 +357,19 @@ func appendDirectSubscription(outboundsBySubscription map[string][]option.Outbou
 }
 
 func buildServerConfig(cfg *config.Config) *server.ServerConfig {
+	// Convert config.RenameRule to server.RenameRule
+	var renameRules []server.RenameRule
+	for _, rule := range cfg.HTTP.Rename {
+		renameRules = append(renameRules, server.RenameRule{
+			Pattern:       rule.Pattern,
+			Replace:       rule.Replace,
+			Subscriptions: rule.Subscriptions,
+		})
+	}
+
 	serverCfg := &server.ServerConfig{
 		Listen: fmt.Sprintf("%s:%d", cfg.HTTP.Listen, cfg.HTTP.Port),
-		Rename: cfg.HTTP.Rename,
+		Rename: renameRules,
 	}
 	if cfg.HTTP.TLS != nil {
 		// Build TLS options (supports ACME)
@@ -364,7 +384,7 @@ func buildServerConfig(cfg *config.Config) *server.ServerConfig {
 	return serverCfg
 }
 
-func buildServerState(cfg *config.Config, subManager *subscription.Manager, users []inbound.User, httpUserMapping map[string][]string) *server.State {
+func buildServerState(cfg *config.Config, subManager *subscription.Manager, users []inbound.User, httpUserMapping map[string][]string, outboundToSubscription map[string]string) *server.State {
 	var sni string
 	if cfg.Hysteria2.Public.SNI != "" {
 		sni = cfg.Hysteria2.Public.SNI
@@ -388,6 +408,7 @@ func buildServerState(cfg *config.Config, subManager *subscription.Manager, user
 		Users:                    users,
 		LocalOnlyTags:            subManager.GetLocalOnlyTags(),
 		HTTPUserToHysteria2Users: httpUserMapping,
+		OutboundToSubscription:   outboundToSubscription,
 		PublicAddr:               cfg.Hysteria2.Public.Server,
 		PublicPorts:              cfg.Hysteria2.Public.GetPorts(),
 		SNI:                      sni,

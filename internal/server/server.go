@@ -23,10 +23,17 @@ import (
 	"github.com/sagernet/sing/common/json"
 )
 
+// RenameRule defines a single rename pattern with optional subscription filter
+type RenameRule struct {
+	Pattern       string
+	Replace       string
+	Subscriptions []string
+}
+
 // ServerConfig holds the server configuration
 type ServerConfig struct {
 	Listen          string
-	Rename          map[string]string
+	Rename          []RenameRule
 	CertificatePath string
 	KeyPath         string
 	TLSOptions      *option.InboundTLSOptions
@@ -44,18 +51,20 @@ type State struct {
 	Users                    []inbound.User
 	LocalOnlyTags            map[string]bool     // Tags of local-only outbounds (not available to users)
 	HTTPUserToHysteria2Users map[string][]string // HTTP username -> Hysteria2 usernames mapping
+	OutboundToSubscription   map[string]string   // Outbound tag -> subscription name mapping
 	PublicAddr               string
 	PublicPorts              []string // Port list, supports ranges like "443:453"
 	SNI                      string
 	Obfs                     string
 	ObfsPassword             string
-	DirectTag                string // Tag of the direct outbound; rename is skipped for it
+	DirectTag                string // Tag of the direct outbound
 }
 
-// renamePattern holds compiled regex and replacement string
+// renamePattern holds compiled regex, replacement string, and subscription filter
 type renamePattern struct {
-	regex *regexp.Regexp
-	repl  string
+	regex         *regexp.Regexp
+	repl          string
+	subscriptions []string // nil = all except direct, empty = none, list = specified
 }
 
 // Server represents the HTTP subscription server
@@ -79,15 +88,16 @@ func NewServer(ctx context.Context, logger log.ContextLogger, cfg *ServerConfig)
 
 	// Compile rename patterns
 	var renamePatterns []renamePattern
-	for pattern, repl := range cfg.Rename {
-		regex, err := regexp.Compile(pattern)
+	for _, rule := range cfg.Rename {
+		regex, err := regexp.Compile(rule.Pattern)
 		if err != nil {
-			logger.Warn("invalid rename pattern: ", pattern, ": ", err)
+			logger.Warn("invalid rename pattern: ", rule.Pattern, ": ", err)
 			continue
 		}
 		renamePatterns = append(renamePatterns, renamePattern{
-			regex: regex,
-			repl:  repl,
+			regex:         regex,
+			repl:          rule.Replace,
+			subscriptions: rule.Subscriptions,
 		})
 	}
 
@@ -231,17 +241,18 @@ func (s *Server) UpdateUsers(users []HTTPUser) {
 }
 
 // UpdateRenamePatterns updates the rename patterns
-func (s *Server) UpdateRenamePatterns(rename map[string]string) {
+func (s *Server) UpdateRenamePatterns(rename []RenameRule) {
 	var renamePatterns []renamePattern
-	for pattern, repl := range rename {
-		regex, err := regexp.Compile(pattern)
+	for _, rule := range rename {
+		regex, err := regexp.Compile(rule.Pattern)
 		if err != nil {
-			s.logger.Warn("invalid rename pattern: ", pattern, ": ", err)
+			s.logger.Warn("invalid rename pattern: ", rule.Pattern, ": ", err)
 			continue
 		}
 		renamePatterns = append(renamePatterns, renamePattern{
-			regex: regex,
-			repl:  repl,
+			regex:         regex,
+			repl:          rule.Replace,
+			subscriptions: rule.Subscriptions,
 		})
 	}
 
@@ -318,9 +329,34 @@ func (s *Server) filterUsers(allUsers []inbound.User, httpUsername string) []inb
 	return filtered
 }
 
-// applyRename applies rename patterns to a tag
-func (s *Server) applyRename(tag string) string {
+// applyRename applies rename patterns to a tag based on subscription filtering
+// When subscriptions is nil (unset), applies to all except "direct"
+// When subscriptions is empty, doesn't apply
+// When subscriptions contains names, applies only to those subscriptions
+func (s *Server) applyRename(tag string, subscription string) string {
 	for _, pattern := range s.renamePatterns {
+		// Filter by subscription
+		if pattern.subscriptions == nil {
+			// nil means all except direct
+			if subscription == "direct" {
+				continue
+			}
+		} else if len(pattern.subscriptions) == 0 {
+			// Empty list means don't apply to any
+			continue
+		} else {
+			// Check if subscription is in the list
+			found := false
+			for _, sub := range pattern.subscriptions {
+				if sub == subscription {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
 		tag = pattern.regex.ReplaceAllString(tag, pattern.repl)
 	}
 	return strings.TrimSpace(tag)
@@ -417,9 +453,10 @@ func (s *Server) handleSingbox(w http.ResponseWriter, r *http.Request) {
 	var outbounds []option.Outbound
 	for _, user := range filteredUsers {
 		outbound := s.buildHysteria2Outbound(user)
-		// Apply rename patterns (skip direct outbound)
-		if len(s.renamePatterns) > 0 && (s.state.DirectTag == "" || user.Outbound != s.state.DirectTag) {
-			outbound.Tag = s.applyRename(outbound.Tag)
+		// Apply rename patterns with subscription filtering
+		if len(s.renamePatterns) > 0 {
+			subscription := s.state.OutboundToSubscription[user.Outbound]
+			outbound.Tag = s.applyRename(outbound.Tag, subscription)
 		}
 		outbounds = append(outbounds, outbound)
 	}
@@ -543,9 +580,10 @@ func (s *Server) buildHysteria2Link(user inbound.User, portList string) string {
 
 	name := user.Outbound
 	if name != "" {
-		// Apply rename patterns (skip direct outbound)
-		if len(s.renamePatterns) > 0 && (s.state.DirectTag == "" || name != s.state.DirectTag) {
-			name = s.applyRename(name)
+		// Apply rename patterns with subscription filtering
+		if len(s.renamePatterns) > 0 {
+			subscription := s.state.OutboundToSubscription[user.Outbound]
+			name = s.applyRename(name, subscription)
 		}
 		link += "#" + name
 	}

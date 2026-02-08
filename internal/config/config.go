@@ -55,13 +55,20 @@ type RewriteUTLSOptions struct {
 	Fingerprint string `yaml:"fingerprint"`
 }
 
+// RenameRule defines a single rename pattern with optional subscription filter
+type RenameRule struct {
+	Pattern       string   `yaml:"pattern"`       // Regex pattern to match
+	Replace       string   `yaml:"replace"`       // Replacement string
+	Subscriptions []string `yaml:"subscriptions"` // Subscriptions to apply (nil = all except direct, empty = none, list = specified)
+}
+
 // HTTPConfig for the HTTP subscription server
 type HTTPConfig struct {
-	Listen string            `yaml:"listen"`
-	Port   uint16            `yaml:"port"`
-	Rename map[string]string `yaml:"rename"`
-	TLS    *TLSConfig        `yaml:"tls"`
-	Users  []HTTPUser        `yaml:"users"`
+	Listen string       `yaml:"listen"`
+	Port   uint16       `yaml:"port"`
+	Rename []RenameRule `yaml:"rename"`
+	TLS    *TLSConfig   `yaml:"tls"`
+	Users  []HTTPUser   `yaml:"users"`
 }
 
 // DirectConfig defines a direct outbound entry exposed as a virtual subscription.

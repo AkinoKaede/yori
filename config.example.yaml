@@ -123,11 +123,32 @@ http:
   # Note: local_only nodes are hidden for all HTTP users.
 
   # Optional: Rename nodes in subscription output (applied after process rules)
+  # Each rule supports optional subscription filtering:
+  # - subscriptions unset (omit field): applies to all subscriptions EXCEPT "direct"
+  # - subscriptions: []: applies to none (rule disabled)
+  # - subscriptions: ["sub1", "sub2"]: applies only to specified subscriptions
+  # - subscriptions: ["direct"]: you can explicitly rename direct outbound
   rename:
-    "(?i)united states": "US"
-    "(?i)hong kong": "HK"
-    "(?i)singapore": "SG"
-    "^(.*?)\\s+-\\s+.*$": "$1" # Remove suffix after " - "
+    - pattern: "(?i)united states"
+      replace: "US"
+      # subscriptions not set = applies to all except direct
+
+    - pattern: "(?i)hong kong"
+      replace: "HK"
+      subscriptions: ["main-provider"] # Only rename for main-provider subscription
+
+    - pattern: "(?i)singapore"
+      replace: "SG"
+      subscriptions: ["main-provider", "secondary-provider"] # Multiple subscriptions
+
+    - pattern: "^(.*?)\\s+-\\s+.*$"
+      replace: "$1" # Remove suffix after " - "
+      # subscriptions not set = applies to all except direct
+
+    # Example: rename direct outbound
+    # - pattern: "^direct$"
+    #   replace: "Direct Connection"
+    #   subscriptions: ["direct"]
 
   # Optional: HTTPS for HTTP subscription server  # Option 1: ACME automatic certificates (recommended)
   tls:

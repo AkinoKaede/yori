@@ -15,29 +15,39 @@ import (
 )
 
 // GenerateUsers creates inbound users and mappings for HTTP subscriptions.
+// Returns: users, httpUserToHysteria2Users mapping, outboundToSubscription mapping
 func GenerateUsers(
 	ctx context.Context,
 	outboundsBySubscription map[string][]option.Outbound,
 	httpUsers map[string][]string,
 	dataFile *datafile.DataFile,
-) ([]inbound.User, map[string][]string) {
+) ([]inbound.User, map[string][]string, map[string]string) {
 	if len(httpUsers) == 0 {
 		httpUsers = map[string][]string{"user": nil}
 	}
 
 	users := make([]inbound.User, 0)
 	httpUserToHysteria2Users := make(map[string][]string)
+	outboundToSubscription := make(map[string]string)
 
 	for username, subscriptionNames := range httpUsers {
 		var outbounds []option.Outbound
 		if subscriptionNames == nil {
-			for _, subs := range outboundsBySubscription {
-				outbounds = append(outbounds, subs...)
+			for subName, subs := range outboundsBySubscription {
+				for _, ob := range subs {
+					outbounds = append(outbounds, ob)
+					// Build reverse mapping
+					outboundToSubscription[ob.Tag] = subName
+				}
 			}
 		} else if len(subscriptionNames) > 0 {
 			for _, subName := range subscriptionNames {
 				if subs, exists := outboundsBySubscription[subName]; exists {
-					outbounds = append(outbounds, subs...)
+					for _, ob := range subs {
+						outbounds = append(outbounds, ob)
+						// Build reverse mapping
+						outboundToSubscription[ob.Tag] = subName
+					}
 				}
 			}
 		}
@@ -49,7 +59,7 @@ func GenerateUsers(
 		}
 	}
 
-	return users, httpUserToHysteria2Users
+	return users, httpUserToHysteria2Users, outboundToSubscription
 }
 
 func buildUser(ctx context.Context, httpUsername string, outboundTag string, dataFile *datafile.DataFile) (inbound.User, string) {
