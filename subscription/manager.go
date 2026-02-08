@@ -78,7 +78,7 @@ func NewManager(ctx context.Context, logger logger.Logger, cfg *config.Config) (
 	// Initialize cache file
 	var cache *cachefile.CacheFile
 	if cfg.CacheFile != "" {
-		cache = cachefile.New(ctx, cfg.CacheFile)
+		cache = cachefile.New(ctx, logger, cfg.CacheFile)
 		if err := cache.PreStart(); err != nil {
 			return nil, E.Cause(err, "prepare cache file")
 		}

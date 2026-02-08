@@ -130,7 +130,7 @@ func run(log log.ContextLogger, cfg *config.Config) error {
 	// Initialize data file for password storage
 	var dataFile *datafile.DataFile
 	if cfg.DataFile != "" {
-		dataFile = datafile.New(ctx, cfg.DataFile)
+		dataFile = datafile.New(ctx, log, cfg.DataFile)
 		if err := dataFile.PreStart(); err != nil {
 			return E.Cause(err, "prepare data file")
 		}

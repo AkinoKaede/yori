@@ -10,6 +10,7 @@ import (
 	"time"
 
 	E "github.com/sagernet/sing/common/exceptions"
+	"github.com/sagernet/sing/common/logger"
 	"go.etcd.io/bbolt"
 	bboltErrors "go.etcd.io/bbolt/errors"
 )
@@ -18,16 +19,18 @@ const bucketSubscription = "subscription"
 
 // CacheFile manages persistent subscription cache using bbolt
 type CacheFile struct {
-	ctx  context.Context
-	path string
-	DB   *bbolt.DB
+	ctx    context.Context
+	logger logger.Logger
+	path   string
+	DB     *bbolt.DB
 }
 
 // New creates a new CacheFile instance
-func New(ctx context.Context, path string) *CacheFile {
+func New(ctx context.Context, logger logger.Logger, path string) *CacheFile {
 	return &CacheFile{
-		ctx:  ctx,
-		path: path,
+		ctx:    ctx,
+		logger: logger,
+		path:   path,
 	}
 }
 
@@ -59,6 +62,8 @@ func (c *CacheFile) Start() error {
 		return E.Cause(err, "open cache database (locked by another process?)")
 	}
 
+	c.logger.Debug("cache database opened: ", c.path)
+
 	err = db.Update(func(tx *bbolt.Tx) error {
 		_, err = tx.CreateBucketIfNotExists([]byte(bucketSubscription))
 		return err
@@ -71,6 +76,7 @@ func (c *CacheFile) Start() error {
 	}
 
 	c.DB = db
+	c.logger.Debug("cache database initialized successfully")
 	return nil
 }
 
@@ -79,7 +85,12 @@ func (c *CacheFile) Close() error {
 	if c.DB == nil {
 		return nil
 	}
-	return c.DB.Close()
+	c.logger.Debug("closing cache database")
+	err := c.DB.Close()
+	if err == nil {
+		c.logger.Debug("cache database closed successfully")
+	}
+	return err
 }
 
 // PreStart ensures cache directory exists
@@ -117,8 +128,10 @@ func (c *CacheFile) LoadSubscription(ctx context.Context, name string) *Subscrip
 		return subscription.UnmarshalBinary(ctx, data)
 	})
 	if err != nil {
+		c.logger.Debug("cache miss for subscription: ", name)
 		return nil
 	}
+	c.logger.Debug("cache hit for subscription: ", name, ", outbounds: ", len(subscription.Content))
 	return &subscription
 }
 
@@ -127,6 +140,8 @@ func (c *CacheFile) StoreSubscription(ctx context.Context, name string, subscrip
 	if c.DB == nil {
 		return nil
 	}
+
+	c.logger.Debug("storing subscription to cache: ", name, ", outbounds: ", len(subscription.Content))
 
 	return c.DB.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte(bucketSubscription))

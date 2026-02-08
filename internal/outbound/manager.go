@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 	"sync"
 	"time"
 
@@ -310,13 +311,13 @@ func (m *Manager) Reload(outboundOptions []option.Outbound) error {
 
 	m.logger.Debug("outbound reload diff: reused=", len(reusedTags), " created=", len(createdTags), " removed=", len(removedTags))
 	if len(reusedTags) > 0 {
-		m.logger.Debug("  reused: ", reusedTags)
+		m.logger.Debug("  reused: ", strings.Join(reusedTags, ", "))
 	}
 	if len(createdTags) > 0 {
-		m.logger.Debug("  created: ", createdTags)
+		m.logger.Debug("  created: ", strings.Join(createdTags, ", "))
 	}
 	if len(removedTags) > 0 {
-		m.logger.Debug("  removed: ", removedTags)
+		m.logger.Debug("  removed: ", strings.Join(removedTags, ", "))
 	}
 
 	for _, ob := range toClose {

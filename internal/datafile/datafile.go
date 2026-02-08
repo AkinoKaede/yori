@@ -10,6 +10,7 @@ import (
 	"time"
 
 	E "github.com/sagernet/sing/common/exceptions"
+	"github.com/sagernet/sing/common/logger"
 	"go.etcd.io/bbolt"
 	bboltErrors "go.etcd.io/bbolt/errors"
 )
@@ -18,16 +19,18 @@ const bucketPassword = "password"
 
 // DataFile manages persistent user password storage using bbolt
 type DataFile struct {
-	ctx  context.Context
-	path string
-	DB   *bbolt.DB
+	ctx    context.Context
+	logger logger.Logger
+	path   string
+	DB     *bbolt.DB
 }
 
 // New creates a new DataFile instance
-func New(ctx context.Context, path string) *DataFile {
+func New(ctx context.Context, logger logger.Logger, path string) *DataFile {
 	return &DataFile{
-		ctx:  ctx,
-		path: path,
+		ctx:    ctx,
+		logger: logger,
+		path:   path,
 	}
 }
 
@@ -59,6 +62,8 @@ func (d *DataFile) Start() error {
 		return E.Cause(err, "open data database (locked by another process?)")
 	}
 
+	d.logger.Debug("data database opened: ", d.path)
+
 	err = db.Update(func(tx *bbolt.Tx) error {
 		_, err = tx.CreateBucketIfNotExists([]byte(bucketPassword))
 		return err
@@ -71,6 +76,7 @@ func (d *DataFile) Start() error {
 	}
 
 	d.DB = db
+	d.logger.Debug("data database initialized successfully")
 	return nil
 }
 
@@ -79,7 +85,12 @@ func (d *DataFile) Close() error {
 	if d.DB == nil {
 		return nil
 	}
-	return d.DB.Close()
+	d.logger.Debug("closing data database")
+	err := d.DB.Close()
+	if err == nil {
+		d.logger.Debug("data database closed successfully")
+	}
+	return err
 }
 
 // PreStart ensures data directory exists
@@ -118,8 +129,10 @@ func (d *DataFile) LoadPassword(ctx context.Context, username string) string {
 		return nil
 	})
 	if err != nil {
+		d.logger.Debug("password not found for user: ", username)
 		return ""
 	}
+	d.logger.Debug("password loaded for user: ", username)
 	return password
 }
 
@@ -128,6 +141,8 @@ func (d *DataFile) StorePassword(ctx context.Context, username string, password 
 	if d.DB == nil {
 		return nil
 	}
+
+	d.logger.Debug("storing password for user: ", username)
 
 	return d.DB.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte(bucketPassword))
