@@ -3,7 +3,7 @@ LABEL maintainer="AkinoKaede"
 COPY . /go/src/github.com/AkinoKaede/yori
 WORKDIR /go/src/github.com/AkinoKaede/yori
 ARG TARGETOS TARGETARCH
-ARG TAGS="with_acme"
+ARG TAGS="with_acme with_quic with_utls"
 ARG GOPROXY=""
 ENV GOPROXY ${GOPROXY}
 ENV CGO_ENABLED=0

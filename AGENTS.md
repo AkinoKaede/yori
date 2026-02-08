@@ -9,9 +9,9 @@
 - `acme/`, `cache.db`, and `data.db` are runtime artifacts (certs/cache/state); avoid committing changes.
 
 ## Build, Test, and Development Commands
-- `make build` builds the `yori` binary (set `BINARY=...` to override output path).
+- `make build` builds the `yori` binary with ACME, QUIC and uTLS support (set `BINARY=...` to override output path).
 - `make build-grpc` builds with gRPC support (`with_grpc` build tag).
-- `make run` runs the app from source with ACME support (`with_acme` tag).
+- `make run` runs the app from source with ACME, QUIC and uTLS support (`with_acme with_quic with_utls` tags).
 - `make run-grpc` runs with gRPC support.
 - `make test` executes `go test ./...`.
 - `make tidy` runs `go mod tidy`.

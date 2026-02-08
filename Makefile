@@ -8,7 +8,7 @@ VERSION = $(TAG:v%=%)
 GO ?= go
 BINARY ?= yori
 CMD ?= ./cmd/yori
-TAGS ?= with_acme
+TAGS ?= with_acme with_quic with_utls
 LDFLAGS ?=
 
 PARAMS = -v -trimpath -ldflags "-X 'github.com/AkinoKaede/yori/pkg/constant.Version=$(VERSION)' -s -w -buildid= $(LDFLAGS)"
