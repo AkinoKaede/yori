@@ -18,6 +18,7 @@ import (
 	"github.com/AkinoKaede/yori/internal/engine"
 	"github.com/AkinoKaede/yori/pkg/constant"
 
+	_ "github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
