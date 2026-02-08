@@ -1,8 +1,6 @@
-# yori
+# yori - Your Outbound Relay Integrator
 
-Your Outbound Relay Integrator.
-
-A Hysteria2-based relay proxy that dynamically fetches outbounds from multiple subscription sources, generates stable user credentials, and provides HTTP subscription endpoints.
+A relay proxy that dynamically fetches outbounds from multiple subscription sources, generates user credentials, and provides HTTP subscription endpoints.
 
 ## Features
 
@@ -10,11 +8,9 @@ A Hysteria2-based relay proxy that dynamically fetches outbounds from multiple s
 - 🎯 **Advanced Filtering**: Regex-based filtering, type filtering, exclusions with inversion support
 - ✏️ **Flexible Rewriting**: Rename nodes with regex capture groups, remove emojis, rewrite multiplex/dialer/TLS configs
 - 🔐 **Automatic TLS**: ACME support (Let's Encrypt, ZeroSSL) with DNS-01 challenge for wildcard certificates
-- 🎭 **Obfuscation**: Hysteria2 salamander obfuscation support
-- 🔌 **Multi-Port Inbound**: Listen on multiple ports with single configuration
 - 📡 **HTTP Subscriptions**: Provide base64 and sing-box format subscriptions to downstream clients
 - ♻️ **Hot Reload**: Automatic scheduled reload + manual reload via SIGHUP signal
-- 🧭 **User-Based Routing**: Each outbound gets a unique user with stable credentials (hash-based)
+- 🧭 **User-Based Routing**: Each outbound gets a unique user with credentials
 
 ## Architecture
 
@@ -35,7 +31,6 @@ A Hysteria2-based relay proxy that dynamically fetches outbounds from multiple s
          ▼
 ┌─────────────────┐
 │ User Generation │
-│ (Stable Hash)   │
 └────────┬────────┘
          │
          ▼
@@ -54,7 +49,6 @@ A Hysteria2-based relay proxy that dynamically fetches outbounds from multiple s
 cd yori
 make build
 ```
-
 
 ## Configuration
 
@@ -149,21 +143,6 @@ tls:
   key_path: "/path/to/key.pem"
 ```
 
-#### Multi-Port Setup
-
-```yaml
-hysteria2:
-  ports: [443, 8443, 10443]  # Listen on multiple ports
-  
-  public:
-    ports: [443]  # Only expose :443 in subscriptions
-```
-
-This allows you to:
-- Load balance across ports
-- Provide different ports for different networks
-- Hide internal ports from public subscriptions
-
 ## Usage
 
 ### Start the Service
@@ -234,8 +213,8 @@ curl http://your-server:8080/sub/base64
 Returns base64-encoded `hysteria2://` share links:
 
 ```
-hysteria2://user1:pass1@relay.example.com:443?sni=relay.example.com&alpn=h3&obfs=salamander&obfs-password=xxx#user1
-hysteria2://user2:pass2@relay.example.com:443?sni=relay.example.com&alpn=h3&obfs=salamander&obfs-password=xxx#user2
+hysteria2://user1:pass1@relay.example.com:443?sni=relay.example.com&alpn=h3&obfs=salamander&obfs-password=your-strong-obfs-password#outbound1
+hysteria2://user2:pass2@relay.example.com:443?sni=relay.example.com&alpn=h3&obfs=salamander&obfs-password=your-strong-obfs-password#outbound2
 ```
 
 Import this URL directly into compatible clients (ShadowRocket, Clash, etc.)
@@ -253,7 +232,7 @@ Returns JSON configuration:
   "outbounds": [
     {
       "type": "hysteria2",
-      "tag": "user1",
+      "tag": "outbound1",
       "server": "relay.example.com",
       "server_port": 443,
       "password": "generated-password",
@@ -263,7 +242,7 @@ Returns JSON configuration:
       },
       "obfs": {
         "type": "salamander",
-        "password": "xxx"
+        "password": "your-strong-obfs-password"
       }
     }
   ]
@@ -337,50 +316,11 @@ acme:
 ls -lah ./data/acme/
 ```
 
-### No Outbounds After Filtering
-
-Check logs for filter match counts:
-
-```bash
-# Enable debug logging in code or check info logs
-tail -f /var/log/yori.log
-```
-
-Verify filter regex:
-
-```bash
-# Test regex online: regex101.com
-```
-
-### Subscription Fetch Failures
-
-**SSL/TLS errors:**
-
-```yaml
-# Add custom User-Agent
-user_agent: "clash/1.0"
-```
-
-**Timeout:**
-
-Increase HTTP client timeout in code or check network connectivity.
-
-### sing-box Start Failures
-
-**Port already in use:**
-
-```bash
-lsof -i :443
-# Kill conflicting process or change port
-```
-
-**Invalid configuration:**
-
-Check sing-box logs for specific errors.
-
 ## License
 
-GPL-3.0-only
+This repository is licensed under [GNU General Public License v3.0 only](./LICENSE).
+
+SPDX-License-Identifier: [GPL-3.0-or-later](https://spdx.org/licenses/GPL-3.0-only.html)
 
 ## Credits
 
