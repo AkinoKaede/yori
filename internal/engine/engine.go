@@ -325,11 +325,13 @@ func appendDirectOutbound(outbounds []option.Outbound, directCfg *config.DirectC
 			return outbounds
 		}
 	}
-	return append(outbounds, option.Outbound{
+	// Prepend direct outbound to the beginning
+	directOutbound := option.Outbound{
 		Type:    C.TypeDirect,
 		Tag:     directCfg.Tag,
 		Options: &option.DirectOutboundOptions{},
-	})
+	}
+	return append([]option.Outbound{directOutbound}, outbounds...)
 }
 
 func appendDirectSubscription(outboundsBySubscription map[string][]option.Outbound, directCfg *config.DirectConfig) map[string][]option.Outbound {
