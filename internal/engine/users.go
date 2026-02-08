@@ -28,12 +28,26 @@ type subscriptionManagerWithDirect struct {
 }
 
 func (s *subscriptionManagerWithDirect) MergeBySubscriptionNames(subscriptionNames []string) []option.Outbound {
-	return s.manager.MergeBySubscriptionNames(subscriptionNames)
+	outbounds := s.manager.MergeBySubscriptionNames(subscriptionNames)
+	// Add direct outbound if needed and if "direct" is in subscription names or subscription names is empty/nil
+	if len(subscriptionNames) == 0 || containsDirectSubscription(subscriptionNames) {
+		outbounds = appendDirectOutbound(outbounds, s.directCfg)
+	}
+	return outbounds
 }
 
 func (s *subscriptionManagerWithDirect) GetOutboundsBySubscription() map[string][]option.Outbound {
 	result := s.manager.GetOutboundsBySubscription()
 	return appendDirectSubscriptionMap(result, s.directCfg)
+}
+
+func containsDirectSubscription(subscriptionNames []string) bool {
+	for _, name := range subscriptionNames {
+		if name == "direct" {
+			return true
+		}
+	}
+	return false
 }
 
 func appendDirectSubscriptionMap(outboundsBySubscription map[string][]option.Outbound, directCfg *config.DirectConfig) map[string][]option.Outbound {
