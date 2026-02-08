@@ -154,6 +154,7 @@ func (h *Hysteria2Inbound) Close() error {
 
 // UpdateUsers hot-reloads the user list without restarting the service.
 func (h *Hysteria2Inbound) UpdateUsers(users []User) error {
+	h.logger.Debug("updating inbound users: ", len(users), " users")
 	h.usersMu.Lock()
 	h.users = append(h.users[:0], users...)
 	h.usersMu.Unlock()
@@ -163,18 +164,21 @@ func (h *Hysteria2Inbound) UpdateUsers(users []User) error {
 	for index, user := range users {
 		userList = append(userList, index)
 		passwordList = append(passwordList, user.Password)
+		h.logger.Debug("  user[", index, "]: ", user.Name, " -> ", user.Outbound)
 	}
 
 	if h.service != nil {
 		h.service.UpdateUsers(userList, passwordList)
 	}
 
+	h.logger.Debug("inbound users updated successfully")
 	return nil
 }
 
 // NewConnectionEx handles a new TCP connection.
 func (h *Hysteria2Inbound) NewConnectionEx(ctx context.Context, conn net.Conn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
 	ctx = log.ContextWithNewID(ctx)
+	h.logger.DebugContext(ctx, "new TCP connection: ", source, " -> ", destination)
 	metadata := buildInboundMetadata(source, destination)
 	user, ok := h.lookupUser(ctx)
 	if !ok {
@@ -185,6 +189,7 @@ func (h *Hysteria2Inbound) NewConnectionEx(ctx context.Context, conn net.Conn, s
 		return
 	}
 	metadata.User = user.Name
+	h.logger.DebugContext(ctx, "dispatching TCP connection to outbound: ", user.Outbound)
 	if h.dispatcher != nil {
 		h.dispatcher.DispatchConnection(ctx, conn, metadata, user, onClose)
 	}
@@ -193,6 +198,7 @@ func (h *Hysteria2Inbound) NewConnectionEx(ctx context.Context, conn net.Conn, s
 // NewPacketConnectionEx handles a new UDP packet connection.
 func (h *Hysteria2Inbound) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
 	ctx = log.ContextWithNewID(ctx)
+	h.logger.DebugContext(ctx, "new UDP connection: ", source, " -> ", destination)
 	metadata := buildInboundMetadata(source, destination)
 	user, ok := h.lookupUser(ctx)
 	if !ok {
@@ -203,6 +209,7 @@ func (h *Hysteria2Inbound) NewPacketConnectionEx(ctx context.Context, conn N.Pac
 		return
 	}
 	metadata.User = user.Name
+	h.logger.DebugContext(ctx, "dispatching UDP connection to outbound: ", user.Outbound)
 	if h.dispatcher != nil {
 		h.dispatcher.DispatchPacketConnection(ctx, conn, metadata, user, onClose)
 	}
@@ -211,14 +218,18 @@ func (h *Hysteria2Inbound) NewPacketConnectionEx(ctx context.Context, conn N.Pac
 func (h *Hysteria2Inbound) lookupUser(ctx context.Context) (User, bool) {
 	userID, ok := auth.UserFromContext[int](ctx)
 	if !ok {
+		h.logger.DebugContext(ctx, "no user ID in context")
 		return User{}, false
 	}
 	h.usersMu.RLock()
 	defer h.usersMu.RUnlock()
 	if userID < 0 || userID >= len(h.users) {
+		h.logger.DebugContext(ctx, "user ID out of range: ", userID, " (total users: ", len(h.users), ")")
 		return User{}, false
 	}
-	return h.users[userID], true
+	user := h.users[userID]
+	h.logger.DebugContext(ctx, "authenticated user: ", user.Name, " -> outbound: ", user.Outbound)
+	return user, true
 }
 
 func buildInboundMetadata(source M.Socksaddr, destination M.Socksaddr) adapter.InboundContext {

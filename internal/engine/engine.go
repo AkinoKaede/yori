@@ -11,6 +11,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/AkinoKaede/yori/internal/config"
 	"github.com/AkinoKaede/yori/internal/datafile"
@@ -125,6 +126,8 @@ func (e *Engine) Close() error {
 
 // Reload re-fetches subscriptions and hot-reloads inbounds/outbounds/state.
 func (e *Engine) Reload(newCfg *config.Config) error {
+	startTime := time.Now()
+	e.logger.Debug("starting engine reload")
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -144,22 +147,29 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 		e.subManager = subManager
 	}
 
+	fetchStart := time.Now()
 	if err := e.subManager.FetchAll(); err != nil {
 		e.logger.Warn("Some subscriptions failed to fetch: ", err)
 	}
+	e.logger.Debug("subscription fetch completed in ", time.Since(fetchStart))
 
 	outboundsBySubscription := appendDirectSubscription(e.subManager.GetOutboundsBySubscription(), newCfg.Direct)
 	outbounds := appendDirectOutbound(e.subManager.MergeAll(), newCfg.Direct)
 	if len(outbounds) == 0 {
 		return E.New("no outbounds after reload")
 	}
+	e.logger.Debug("merged ", len(outbounds), " total outbounds")
 
+	userGenStart := time.Now()
 	httpUsers := buildHTTPUserSubscriptions(newCfg)
 	users, httpUserMapping := GenerateUsers(e.ctx, outboundsBySubscription, httpUsers, e.dataFile)
+	e.logger.Debug("generated ", len(users), " users in ", time.Since(userGenStart))
 
+	outboundReloadStart := time.Now()
 	if err := e.outbound.Reload(outbounds); err != nil {
 		return E.Cause(err, "reload outbounds")
 	}
+	e.logger.Debug("outbound reload completed in ", time.Since(outboundReloadStart))
 
 	if !sameHysteria2Config(e.cfg.Hysteria2, newCfg.Hysteria2) {
 		e.logger.Info("hysteria2 config changed, restarting inbound")
@@ -185,6 +195,7 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 	}
 
 	e.cfg = newCfg
+	e.logger.Debug("engine reload completed in ", time.Since(startTime))
 	return nil
 }
 
@@ -201,7 +212,7 @@ func (e *Engine) DispatchConnection(ctx context.Context, conn net.Conn, metadata
 	}
 	metadata.Outbound = outboundHandler.Tag()
 	httpUser := resolveHTTPUser(user)
-	e.logger.InfoContext(ctx, "inbound connection user=", httpUser, " outbound=", metadata.Outbound, " target=", metadata.Destination)
+	e.logger.InfoContext(ctx, "inbound connection user=", httpUser, " outbound=", metadata.Outbound, " target=", metadata.Destination, " source=", metadata.Source)
 	e.connMgr.NewConnection(ctx, outboundHandler, conn, metadata, wrappedOnClose)
 }
 
@@ -218,7 +229,7 @@ func (e *Engine) DispatchPacketConnection(ctx context.Context, conn N.PacketConn
 	}
 	metadata.Outbound = outboundHandler.Tag()
 	httpUser := resolveHTTPUser(user)
-	e.logger.InfoContext(ctx, "inbound packet user=", httpUser, " outbound=", metadata.Outbound, " target=", metadata.Destination)
+	e.logger.InfoContext(ctx, "inbound packet user=", httpUser, " outbound=", metadata.Outbound, " target=", metadata.Destination, " source=", metadata.Source)
 	e.connMgr.NewPacketConnection(ctx, outboundHandler, conn, metadata, wrappedOnClose)
 }
 

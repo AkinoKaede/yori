@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"sync"
+	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
@@ -96,7 +97,7 @@ func (m *Manager) withDNSManager(ctx context.Context) context.Context {
 	if m.dnsMgr != nil {
 		ctx = service.ContextWith[adapter.DNSTransportManager](ctx, m.dnsMgr)
 		if m.dnsRouter != nil {
-			ctx = service.ContextWith[adapter.DNSRouter](ctx, m.dnsRouter)
+			ctx = service.ContextWith(ctx, m.dnsRouter)
 		}
 		return ctx
 	}
@@ -167,10 +168,12 @@ func (m *Manager) Acquire(tag string, onClose N.CloseHandlerFunc) (adapter.Outbo
 	outbound, ok := m.outbounds[tag]
 	if !ok {
 		m.mu.Unlock()
+		m.logger.Debug("outbound not found: ", tag)
 		return nil, onClose, false
 	}
 	state := m.ensureTrackedLocked(outbound)
 	state.active++
+	m.logger.Debug("acquired outbound[", tag, "] active_connections=", state.active, " draining=", state.draining)
 	m.mu.Unlock()
 
 	var once sync.Once
@@ -224,6 +227,9 @@ func (m *Manager) Close() error {
 
 // Reload diffs the outbound set and applies changes without restarting unchanged outbounds.
 func (m *Manager) Reload(outboundOptions []option.Outbound) error {
+	startTime := time.Now()
+	m.logger.Debug("starting outbound reload with ", len(outboundOptions), " outbound(s)")
+
 	m.mu.Lock()
 
 	nextHashes := make(map[string]string, len(outboundOptions))
@@ -231,6 +237,8 @@ func (m *Manager) Reload(outboundOptions []option.Outbound) error {
 	nextOrdered := make([]adapter.Outbound, 0, len(outboundOptions))
 	createdOutbounds := make(map[string]adapter.Outbound)
 	toClose := make([]adapter.Outbound, 0)
+
+	var reusedTags, createdTags, removedTags []string
 
 	for _, outboundOption := range outboundOptions {
 		if outboundOption.Tag == "" {
@@ -245,10 +253,12 @@ func (m *Manager) Reload(outboundOptions []option.Outbound) error {
 			if m.hashes[outboundOption.Tag] == hash {
 				nextOutbounds[outboundOption.Tag] = existing
 				nextOrdered = append(nextOrdered, existing)
+				reusedTags = append(reusedTags, outboundOption.Tag)
 				continue
 			}
 		}
 
+		createStart := time.Now()
 		created, err := m.registry.CreateOutbound(m.ctx, nil, m.logger, outboundOption.Tag, outboundOption.Type, outboundOption.Options)
 		if err != nil {
 			m.mu.Unlock()
@@ -275,16 +285,19 @@ func (m *Manager) Reload(outboundOptions []option.Outbound) error {
 			m.closeCreated(createdOutbounds)
 			return E.Cause(err, "start outbound[", outboundOption.Tag, "]")
 		}
+		m.logger.Debug("created outbound[", outboundOption.Tag, "] type=", outboundOption.Type, " in ", time.Since(createStart))
 
 		createdOutbounds[outboundOption.Tag] = created
 		nextOutbounds[outboundOption.Tag] = created
 		nextOrdered = append(nextOrdered, created)
+		createdTags = append(createdTags, outboundOption.Tag)
 	}
 
 	for _, existing := range m.outbounds {
 		if next, ok := nextOutbounds[existing.Tag()]; ok && next == existing {
 			continue
 		}
+		removedTags = append(removedTags, existing.Tag())
 		if m.drainOutboundLocked(existing) {
 			toClose = append(toClose, existing)
 		}
@@ -295,12 +308,24 @@ func (m *Manager) Reload(outboundOptions []option.Outbound) error {
 	m.hashes = nextHashes
 	m.mu.Unlock()
 
+	m.logger.Debug("outbound reload diff: reused=", len(reusedTags), " created=", len(createdTags), " removed=", len(removedTags))
+	if len(reusedTags) > 0 {
+		m.logger.Debug("  reused: ", reusedTags)
+	}
+	if len(createdTags) > 0 {
+		m.logger.Debug("  created: ", createdTags)
+	}
+	if len(removedTags) > 0 {
+		m.logger.Debug("  removed: ", removedTags)
+	}
+
 	for _, ob := range toClose {
 		if err := common.Close(ob); err != nil {
 			m.logger.Warn("close outbound: ", err)
 		}
 	}
 
+	m.logger.Debug("outbound reload completed in ", time.Since(startTime))
 	return nil
 }
 
@@ -314,10 +339,12 @@ func (m *Manager) closeCreated(created map[string]adapter.Outbound) {
 
 // Remove removes an outbound by tag.
 func (m *Manager) Remove(tag string) error {
+	m.logger.Debug("removing outbound[", tag, "]")
 	m.mu.Lock()
 	existing, ok := m.outbounds[tag]
 	if !ok {
 		m.mu.Unlock()
+		m.logger.Debug("outbound not found: ", tag)
 		return E.New("outbound not found: ", tag)
 	}
 	delete(m.outbounds, tag)
@@ -331,8 +358,10 @@ func (m *Manager) Remove(tag string) error {
 	closeNow := m.drainOutboundLocked(existing)
 	m.mu.Unlock()
 	if closeNow {
+		m.logger.Debug("outbound[", tag, "] removed and closed immediately")
 		return common.Close(existing)
 	}
+	m.logger.Debug("outbound[", tag, "] marked for draining")
 	return nil
 }
 
@@ -390,9 +419,11 @@ func (m *Manager) release(outbound adapter.Outbound) {
 	if state.active > 0 {
 		state.active--
 	}
+	m.logger.Debug("released outbound[", outbound.Tag(), "] active_connections=", state.active, " draining=", state.draining)
 	if state.draining && state.active == 0 {
 		delete(m.tracked, outbound)
 		closeNow = true
+		m.logger.Debug("outbound[", outbound.Tag(), "] drained, closing now")
 	}
 	m.mu.Unlock()
 
