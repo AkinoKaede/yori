@@ -216,6 +216,11 @@ func buildVmessOutbound(vmessOpts V2rayNVmessOptions) option.Outbound {
 			Type:             C.V2RayTransportTypeWebsocket,
 			WebsocketOptions: wsOptions,
 		}
+
+		// WebSocket with TLS requires http/1.1 ALPN
+		if options.TLS != nil && options.TLS.Enabled && len(options.TLS.ALPN) == 0 {
+			options.TLS.ALPN = []string{"http/1.1"}
+		}
 	case "http", "h2":
 		options.Transport = &option.V2RayTransportOptions{
 			Type: C.V2RayTransportTypeHTTP,
@@ -224,12 +229,20 @@ func buildVmessOutbound(vmessOpts V2rayNVmessOptions) option.Outbound {
 				Host: badoption.Listable[string]{vmessOpts.Host},
 			},
 		}
+		// HTTP/2 requires h2 ALPN for TLS
+		if options.TLS != nil && options.TLS.Enabled && len(options.TLS.ALPN) == 0 {
+			options.TLS.ALPN = []string{"h2"}
+		}
 	case "grpc":
 		options.Transport = &option.V2RayTransportOptions{
 			Type: C.V2RayTransportTypeGRPC,
 			GRPCOptions: option.V2RayGRPCOptions{
 				ServiceName: vmessOpts.Path,
 			},
+		}
+		// gRPC requires h2 ALPN for TLS
+		if options.TLS != nil && options.TLS.Enabled && len(options.TLS.ALPN) == 0 {
+			options.TLS.ALPN = []string{"h2"}
 		}
 	case "tcp":
 		// TCP with HTTP obfuscation
