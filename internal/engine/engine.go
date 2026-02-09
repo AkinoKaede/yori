@@ -135,7 +135,8 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 		newCfg = e.cfg
 	}
 
-	if !sameSubscriptions(e.cfg.Subscriptions, newCfg.Subscriptions) {
+	rebuildManager := !sameSubscriptions(e.cfg.Subscriptions, newCfg.Subscriptions)
+	if rebuildManager {
 		e.logger.Info("subscription list changed, rebuilding manager")
 		if e.subManager != nil {
 			_ = e.subManager.Close()
@@ -145,6 +146,11 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 			return E.Cause(err, "rebuild subscription manager")
 		}
 		e.subManager = subManager
+	} else if !sameSubscriptionProcesses(e.cfg.Subscriptions, newCfg.Subscriptions) {
+		e.logger.Info("subscription process changed, recompiling pipeline")
+		if err := e.subManager.UpdateProcesses(newCfg.Subscriptions); err != nil {
+			return E.Cause(err, "update subscription process")
+		}
 	}
 
 	fetchStart := time.Now()
@@ -397,7 +403,30 @@ func buildServerState(cfg *config.Config, subManager *subscription.Manager, user
 }
 
 func sameSubscriptions(a, b []config.Subscription) bool {
-	return hashValue(a) == hashValue(b)
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || a[i].URL != b[i].URL || a[i].UserAgent != b[i].UserAgent {
+			return false
+		}
+	}
+	return true
+}
+
+func sameSubscriptionProcesses(a, b []config.Subscription) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name {
+			return false
+		}
+		if hashValue(a[i].Process) != hashValue(b[i].Process) {
+			return false
+		}
+	}
+	return true
 }
 
 func sameHysteria2Config(a, b config.Hysteria2Config) bool {

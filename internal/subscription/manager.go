@@ -179,6 +179,38 @@ func (m *Manager) FetchAll() error {
 	return nil
 }
 
+// UpdateProcesses recompiles process pipelines and reprocesses cached outbounds.
+func (m *Manager) UpdateProcesses(subscriptions []config.Subscription) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	subscriptionMap := make(map[string]*Subscription, len(m.subscriptions))
+	for _, sub := range m.subscriptions {
+		subscriptionMap[sub.Name] = sub
+	}
+
+	for _, subCfg := range subscriptions {
+		sub, ok := subscriptionMap[subCfg.Name]
+		if !ok {
+			return E.New("subscription not found: ", subCfg.Name)
+		}
+
+		processes := make([]*ProcessOptions, 0, len(subCfg.Process))
+		for j, procCfg := range subCfg.Process {
+			proc, err := NewProcessOptions(procCfg)
+			if err != nil {
+				return E.Cause(err, "subscription[", subCfg.Name, "]: compile process[", j, "]")
+			}
+			processes = append(processes, proc)
+		}
+		sub.processes = processes
+		m.processSubscription(sub)
+		m.logger.Info("updated process pipeline for ", sub.Name, ": ", len(sub.rawOutbounds), " raw → ", len(sub.Outbounds), " processed")
+	}
+
+	return nil
+}
+
 // fetchSubscription fetches and processes a single subscription
 func (m *Manager) fetchSubscription(sub *Subscription) error {
 	// Check if it's a local file
