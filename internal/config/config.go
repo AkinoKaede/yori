@@ -51,7 +51,13 @@ type OutboundProcessOptions struct {
 	RewriteMultiplex      *option.OutboundMultiplexOptions `yaml:"rewrite_multiplex"`
 	RewriteDialerOptions  *option.DialerOptions            `yaml:"rewrite_dialer_options"`
 	RewritePacketEncoding string                           `yaml:"rewrite_packet_encoding"`
+	RewriteVMessOptions   *RewriteVMessOptions             `yaml:"rewrite_vmess_options"`
 	RewriteUTLS           *RewriteUTLSOptions              `yaml:"rewrite_utls"`
+}
+
+// RewriteVMessOptions for VMess configuration rewriting
+type RewriteVMessOptions struct {
+	Security string `yaml:"security"`
 }
 
 // RewriteUTLSOptions for uTLS configuration rewriting

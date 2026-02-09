@@ -203,6 +203,9 @@ func (p *ProcessOptions) applyRewrites(outbound *option.Outbound) {
 		if p.RewriteDialerOptions != nil {
 			opts.DialerOptions = *p.RewriteDialerOptions
 		}
+		if p.RewriteVMessOptions != nil && p.RewriteVMessOptions.Security != "" {
+			opts.Security = p.RewriteVMessOptions.Security
+		}
 		if p.RewritePacketEncoding != "" {
 			opts.PacketEncoding = p.RewritePacketEncoding
 		}

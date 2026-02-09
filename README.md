@@ -118,6 +118,7 @@ Each process step can include:
 - **`rewrite_multiplex`**: Rewrite multiplex configuration (object)
 - **`rewrite_dialer_options`**: Rewrite dialer options (object)
 - **`rewrite_packet_encoding`**: Rewrite packet encoding (string)
+- **`rewrite_vmess_options`**: Rewrite VMess configuration (object)
 - **`rewrite_utls`**: Rewrite uTLS configuration (object)
 
 #### TLS Configuration
