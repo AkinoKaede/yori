@@ -182,13 +182,6 @@ func buildVmessOutbound(vmessOpts V2rayNVmessOptions) option.Outbound {
 	options.UUID = vmessOpts.ID
 	options.AlterId = int(vmessOpts.Aid)
 
-	// Set security/cipher
-	if vmessOpts.Scy != "" {
-		options.Security = vmessOpts.Scy
-	} else {
-		options.Security = "auto"
-	}
-
 	// Handle TLS
 	tlsEnabled := vmessOpts.TLS == "tls" || vmessOpts.TLS == "true"
 	if tlsEnabled {
