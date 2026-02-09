@@ -4,7 +4,6 @@
 - `cmd/yori/` is the main application entry point (`yori`).
 - `internal/` holds core packages (config, engine, inbound/outbound, subscription, server, utils).
 - `pkg/constant/` exposes shared constants used across packages.
-- `subscription/` contains reusable subscription processing helpers.
 - `config.example.yaml` documents configuration; `config.yaml` is local runtime config.
 - `acme/`, `cache.db`, and `data.db` are runtime artifacts (certs/cache/state); avoid committing changes.
 
@@ -23,6 +22,7 @@
 - Import order follows `gci`’s custom order (`standard`, `github.com/AkinoKaede/*`, `default`).
 - Exported identifiers use `CamelCase`; unexported use `lowerCamelCase`.
 - New files should include the GPL-3.0 header when required (see README).
+- Run `make lint` after edit Go code.
 
 ## Testing Guidelines
 - Tests live next to code as `*_test.go` files and use `TestXxx` naming.
