@@ -5,7 +5,7 @@ package constant
 // Deduplication strategies for handling duplicate outbound tags
 const (
 	// DeduplicationRename appends suffix to duplicate tags (default behavior)
-	// Example: "node", "node-x", "node-xx"
+	// Example: "node", "node (1)", "node (2)", etc.
 	DeduplicationRename = "rename"
 
 	// DeduplicationFirst keeps the first occurrence, discards subsequent duplicates
