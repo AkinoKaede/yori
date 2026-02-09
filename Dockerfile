@@ -18,7 +18,7 @@ RUN set -ex \
         ./cmd/yori
 
 FROM --platform=$TARGETPLATFORM alpine AS dist
-LABEL maintainer="AkinoKaede"
+LABEL maintainer="Kaede Akino <i@akinokae.de>"
 RUN set -ex \
     && apk add --no-cache --upgrade bash tzdata ca-certificates \
     && rm -rf /var/cache/apk/*
