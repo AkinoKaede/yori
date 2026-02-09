@@ -52,42 +52,7 @@ make build
 
 ## Configuration
 
-Create a `config.yaml` file (see [config.example.yaml](config.example.yaml) for full examples):
-
-```yaml
-subscriptions:
-  - name: "provider-1"
-    url: "https://example.com/sub?token=xxx"
-    update_interval: "1h"
-    process:
-      - filter_type: ["shadowsocks", "vmess"]
-      - remove_emoji: true
-
-reload_interval: "30m"
-
-http:
-  listen: "0.0.0.0"
-  port: 8080
-
-hysteria2:
-  listen: "::"
-  ports: [443]
-  up_mbps: 200
-  down_mbps: 200
-  
-  public:
-    server: "relay.example.com"
-    ports: [443]
-  
-  tls:
-    acme:
-      domain: ["relay.example.com"]
-      email: "admin@example.com"
-  
-  obfs:
-    type: "salamander"
-    password: "change-this"
-```
+Create a `config.yaml` file (see [config.example.yaml](config.example.yaml) for full examples).
 
 ### Configuration Sections
 
@@ -258,7 +223,7 @@ Returns JSON configuration:
 Each outbound from subscriptions generates one Hysteria2 user:
 
 - **Username**: Outbound `tag` (after processing/renaming)
-- **Password**: `SHA256(tag + salt)[:32]` - stable across reloads if tag unchanged
+- **Password**: Random generated and store in database.
 - **Routing**: Traffic from each user routes exclusively to their designated outbound
 
 ## Process Pipeline Examples
