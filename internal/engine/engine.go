@@ -146,7 +146,7 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 			return E.Cause(err, "rebuild subscription manager")
 		}
 		e.subManager = subManager
-	} else if !sameSubscriptionProcesses(e.cfg.Subscriptions, newCfg.Subscriptions) {
+	} else if !sameSubscriptionProcesses(e.logger, e.cfg.Subscriptions, newCfg.Subscriptions) {
 		e.logger.Info("subscription process changed, recompiling pipeline")
 		if err := e.subManager.UpdateProcesses(newCfg.Subscriptions); err != nil {
 			return E.Cause(err, "update subscription process")
@@ -177,7 +177,7 @@ func (e *Engine) Reload(newCfg *config.Config) error {
 	}
 	e.logger.Debug("outbound reload completed in ", time.Since(outboundReloadStart))
 
-	if !sameHysteria2Config(e.cfg.Hysteria2, newCfg.Hysteria2) {
+	if !sameHysteria2Config(e.logger, e.cfg.Hysteria2, newCfg.Hysteria2) {
 		e.logger.Info("hysteria2 config changed, restarting inbound")
 		if e.inbound != nil {
 			_ = e.inbound.Close()
@@ -274,7 +274,7 @@ func (e *Engine) reloadHTTPServer(newCfg *config.Config, users []inbound.User, h
 		return nil
 	}
 
-	if !sameHTTPServerConfig(e.cfg.HTTP, newCfg.HTTP) {
+	if !sameHTTPServerConfig(e.logger, e.cfg.HTTP, newCfg.HTTP) {
 		e.logger.Info("HTTP server config changed, restarting")
 		_ = e.httpServer.Stop()
 		serverCfg := buildServerConfig(newCfg)
@@ -414,7 +414,7 @@ func sameSubscriptions(a, b []config.Subscription) bool {
 	return true
 }
 
-func sameSubscriptionProcesses(a, b []config.Subscription) bool {
+func sameSubscriptionProcesses(logger log.ContextLogger, a, b []config.Subscription) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -422,14 +422,24 @@ func sameSubscriptionProcesses(a, b []config.Subscription) bool {
 		if a[i].Name != b[i].Name {
 			return false
 		}
-		if hashValue(a[i].Process) != hashValue(b[i].Process) {
+		hashA, errA := hashValue(a[i].Process)
+		if errA != nil {
+			logger.Warn("hash subscription process failed for ", a[i].Name, ": ", errA)
+			return false
+		}
+		hashB, errB := hashValue(b[i].Process)
+		if errB != nil {
+			logger.Warn("hash subscription process failed for ", b[i].Name, ": ", errB)
+			return false
+		}
+		if hashA != hashB {
 			return false
 		}
 	}
 	return true
 }
 
-func sameHysteria2Config(a, b config.Hysteria2Config) bool {
+func sameHysteria2Config(logger log.ContextLogger, a, b config.Hysteria2Config) bool {
 	payloadA := struct {
 		Listen   string
 		Port     uint16
@@ -460,10 +470,20 @@ func sameHysteria2Config(a, b config.Hysteria2Config) bool {
 		TLS:      b.TLS,
 		Obfs:     b.Obfs,
 	}
-	return hashValue(payloadA) == hashValue(payloadB)
+	hashA, errA := hashValue(payloadA)
+	hashB, errB := hashValue(payloadB)
+	if errA != nil {
+		logger.Warn("hash hysteria2 config failed: ", errA)
+		return false
+	}
+	if errB != nil {
+		logger.Warn("hash hysteria2 config failed: ", errB)
+		return false
+	}
+	return hashA == hashB
 }
 
-func sameHTTPServerConfig(a, b config.HTTPConfig) bool {
+func sameHTTPServerConfig(logger log.ContextLogger, a, b config.HTTPConfig) bool {
 	payloadA := struct {
 		Listen string
 		Port   uint16
@@ -482,16 +502,26 @@ func sameHTTPServerConfig(a, b config.HTTPConfig) bool {
 		Port:   b.Port,
 		TLS:    b.TLS,
 	}
-	return hashValue(payloadA) == hashValue(payloadB)
+	hashA, errA := hashValue(payloadA)
+	hashB, errB := hashValue(payloadB)
+	if errA != nil {
+		logger.Warn("hash http config failed: ", errA)
+		return false
+	}
+	if errB != nil {
+		logger.Warn("hash http config failed: ", errB)
+		return false
+	}
+	return hashA == hashB
 }
 
-func hashValue(value any) string {
+func hashValue(value any) (string, error) {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func buildHTTPTLSOptions(tlsCfg config.TLSConfig) (*option.InboundTLSOptions, error) {
