@@ -1,11 +1,11 @@
 services:
   yori:
-    image: ghcr.io/akinokaede/yori:lastest
+    image: ghcr.io/akinokaede/yori:latest
     container_name: yori
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./config.yaml:/etc/yori/config.yaml:ro
+      - .:/etc/yori:ro
       - data:/var/lib/yori
     command: -D /var/lib/yori -c /etc/yori/config.yaml
 
