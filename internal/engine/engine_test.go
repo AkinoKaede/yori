@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/AkinoKaede/yori/internal/config"
+
+	"github.com/sagernet/sing-box/log"
 )
 
 func TestSubscriptionChangeDetection(t *testing.T) {
@@ -34,7 +36,8 @@ func TestSubscriptionChangeDetection(t *testing.T) {
 	if !sameSubscriptions(base, changedProcess) {
 		t.Fatalf("expected sameSubscriptions to ignore process changes")
 	}
-	if sameSubscriptionProcesses(base, changedProcess) {
+	logger := log.NewNOPFactory().Logger()
+	if sameSubscriptionProcesses(logger, base, changedProcess) {
 		t.Fatalf("expected sameSubscriptionProcesses to detect process changes")
 	}
 
