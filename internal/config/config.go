@@ -3,6 +3,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -84,8 +85,38 @@ type HTTPConfig struct {
 
 // DirectConfig defines a direct outbound entry exposed as a virtual subscription.
 type DirectConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Tag     string `yaml:"tag"`
+	Enabled              bool   `yaml:"enabled"`
+	Tag                  string `yaml:"tag"`
+	option.DialerOptions `yaml:",inline"`
+}
+
+// UnmarshalYAML unmarshals direct config and supports sing-box style inline dialer fields.
+func (d *DirectConfig) UnmarshalYAML(node *yaml.Node) error {
+	var raw map[string]any
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+
+	content, err := json.Marshal(raw)
+	if err != nil {
+		return E.Cause(err, "marshal direct config")
+	}
+
+	var decoded struct {
+		Enabled bool   `json:"enabled"`
+		Tag     string `json:"tag"`
+		option.DialerOptions
+	}
+	if err := json.Unmarshal(content, &decoded); err != nil {
+		return E.Cause(err, "parse direct config")
+	}
+
+	*d = DirectConfig{
+		Enabled:       decoded.Enabled,
+		Tag:           decoded.Tag,
+		DialerOptions: decoded.DialerOptions,
+	}
+	return nil
 }
 
 // HTTPUser for Basic Auth and user filtering

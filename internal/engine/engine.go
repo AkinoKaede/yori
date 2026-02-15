@@ -322,20 +322,29 @@ func buildHTTPUserSubscriptions(cfg *config.Config) map[string][]string {
 	return httpUsers
 }
 
-func appendDirectOutbound(outbounds []option.Outbound, directCfg *config.DirectConfig) []option.Outbound {
+func buildDirectOutbound(directCfg *config.DirectConfig) (option.Outbound, bool) {
 	if directCfg == nil || !directCfg.Enabled || directCfg.Tag == "" {
+		return option.Outbound{}, false
+	}
+
+	return option.Outbound{
+		Type: C.TypeDirect,
+		Tag:  directCfg.Tag,
+		Options: &option.DirectOutboundOptions{
+			DialerOptions: directCfg.DialerOptions,
+		},
+	}, true
+}
+
+func appendDirectOutbound(outbounds []option.Outbound, directCfg *config.DirectConfig) []option.Outbound {
+	directOutbound, ok := buildDirectOutbound(directCfg)
+	if !ok {
 		return outbounds
 	}
 	for _, outbound := range outbounds {
 		if outbound.Tag == directCfg.Tag {
 			return outbounds
 		}
-	}
-	// Prepend direct outbound to the beginning
-	directOutbound := option.Outbound{
-		Type:    C.TypeDirect,
-		Tag:     directCfg.Tag,
-		Options: &option.DirectOutboundOptions{},
 	}
 	return append([]option.Outbound{directOutbound}, outbounds...)
 }

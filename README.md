@@ -86,6 +86,14 @@ Each process step can include:
 - **`rewrite_vmess_options`**: Rewrite VMess configuration (object)
 - **`rewrite_utls`**: Rewrite uTLS configuration (object)
 
+#### Direct Outbound
+
+Optional `direct` section exposes a built-in direct outbound as virtual subscription `direct`:
+
+- **`enabled`**: Enable direct outbound
+- **`tag`**: Outbound tag (default: `direct`)
+- **Dialer fields (inline)**: Use sing-box direct outbound dialer fields directly at this level (for example `tcp_fast_open`, `bind_interface`, `routing_mark`)
+
 #### TLS Configuration
 
 **ACME (Automatic):**

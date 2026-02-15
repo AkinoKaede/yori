@@ -112,6 +112,8 @@ subscriptions:
 direct:
   enabled: true
   tag: "direct"
+  # Optional: direct outbound dial options (same level as sing-box direct outbound)
+  tcp_fast_open: true
 
 # Global reload interval (subscriptions will be updated every reload)
 # Set to 0 or omit to disable auto reload

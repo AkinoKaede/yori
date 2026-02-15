@@ -51,7 +51,8 @@ func containsDirectSubscription(subscriptionNames []string) bool {
 }
 
 func appendDirectSubscriptionMap(outboundsBySubscription map[string][]option.Outbound, directCfg *config.DirectConfig) map[string][]option.Outbound {
-	if directCfg == nil || !directCfg.Enabled || directCfg.Tag == "" {
+	directOutbound, ok := buildDirectOutbound(directCfg)
+	if !ok {
 		return outboundsBySubscription
 	}
 
@@ -70,13 +71,7 @@ func appendDirectSubscriptionMap(outboundsBySubscription map[string][]option.Out
 	}
 
 	// Add direct subscription
-	outboundsBySubscription["direct"] = []option.Outbound{
-		{
-			Type:    "direct",
-			Tag:     directCfg.Tag,
-			Options: &option.DirectOutboundOptions{},
-		},
-	}
+	outboundsBySubscription["direct"] = []option.Outbound{directOutbound}
 	return outboundsBySubscription
 }
 
